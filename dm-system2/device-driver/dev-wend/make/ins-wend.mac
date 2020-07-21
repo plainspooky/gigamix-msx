@@ -1,0 +1,22 @@
+;(C)2001 GIGAMIX/Goripon
+
+	.z80
+	cseg
+
+	extrn	DRVWEND
+
+CALSLT	equ	01Ch
+BLTRVR	equ	408Fh
+RAMAD1	equ	0F342h
+DEVICE	equ	7800h
+
+INSWEND::
+	ld	hl,DRVWEND
+	ld	de,DEVICE
+	ld	bc,512
+	xor	a
+	ld	ix,BLTRVR
+	ld	iy,(RAMAD1-1)
+	jp	CALSLT
+
+	end

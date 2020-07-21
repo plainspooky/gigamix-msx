@@ -1,0 +1,40 @@
+;===== フォントドライバインストーラー 内蔵半角フォント =====
+;(C)1998 GIGAMIX/Influenza
+;97/05/27 - 98/07/08
+
+	.z80
+	CSEG
+
+	extrn	ANK_fontdriver
+
+;DAKFLG	EQU	0FC3FH	;DaKuon Flag
+;TF	EQU	83H	;TouFu Character
+CALSLT	equ	001ch
+BLTRVR	equ	408fh
+RAMAD1	equ	0f342h
+xSIZ16	equ	300h+175
+
+;====================================
+
+INSTAN::
+	LD	HL,ANK_fontdriver
+	LD	DE,7400h
+	ld	bc,512
+	CALL	BLOCK
+
+	LD	HL,SIZE
+	LD	DE,xSIZ16
+	LD	BC,6
+	CALL	BLOCK
+
+	RET
+;------------------------
+BLOCK:	XOR	A
+	LD	IX,BLTRVR
+	LD	IY,(RAMAD1-1)
+	JP	CALSLT
+;------------------------
+SIZE:	DEFB	1,1, 1,1, 0,0
+
+	END
+

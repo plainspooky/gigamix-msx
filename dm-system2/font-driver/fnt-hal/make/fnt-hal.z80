@@ -1,0 +1,146 @@
+;=== Font Driver 'HALNOTE 12x12' ===
+;(C)1998 GIGAMIX/Influenza
+
+	.z80
+	cseg
+
+	public	hal_fontdriver
+	public	SLTHAL
+
+BUFFER	equ	0fc18h
+
+;-----------------------
+;	DEFB	 6,12	;ANK
+;	DEFB	12,12	;1st
+;	DEFB	00,00	;2nd
+;-----------------------
+
+hal_fontdriver:
+	.phase	7600h
+
+;		 0....5....10...15...20...25...30...35...
+	DEFM	'Font Driver For HALNOTE 12*12 /Influenza'
+	DEFB	1AH
+	DEFB	0	;Driver ID (0:Font Driver)
+	DEFB	2	;Size (2:12x12)
+	DEFS	5
+;======================================
+CODE:	DEC	B
+	JR	Z,ZEN
+	INC	B
+	JR	Z,HAN
+; No 2nd Font
+	LD	HL,TOFU
+	LD	DE,0C0CH
+	LD	BC,000CH
+	RET
+;-------
+ZEN:	CALL	SJIS
+	CALL	READ
+	LD	HL,BUFFER
+	LD	DE,0C0CH
+	LD	BC,000CH
+	RET
+;-------
+HAN:	EX	DE,HL
+	LD	A,L
+	SUB	32
+	LD	L,A
+	CP	128
+	JR	C,HAN0
+	LD	DE,736
+	ADD	HL,DE
+HAN0:	CALL	READ
+	LD	HL,BUFFER
+	LD	DE,0C06H
+	LD	BC,000CH
+	RET
+;-------
+READ:	LD	E,L
+	LD	D,H
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE
+	DI
+	LD	(0F51DH),SP
+	LD	SP,0F51DH
+	PUSH	HL
+	LD	A,(SLTHAL)
+	LD	H,80H
+	CALL	0024H
+	POP	HL
+	ADD	HL,HL
+	LD	A,H
+	RLA
+	RLA
+	RLA
+	RLA
+	AND	0FH
+	ADD	A,17H
+	LD	(8FFFH),A
+	INC	A
+	LD	(0AFFFH),A
+	LD	A,H
+	AND	1FH
+	ADD	A,80H
+	LD	H,A
+	LD	DE,BUFFER
+	LD	BC,18
+	LDIR
+	LD	A,(0F341H+2)
+	LD	H,80H
+	CALL	0024H
+	LD	SP,(0F51DH)
+	EI
+	RET
+;------------------------
+;===== S-JIS Exchanger =====
+;DE(S-JISｺｰﾄﾞ) => HL(Kanjiｺｰﾄﾞ)
+;
+;A,B,DE,HL ｦ ﾊｶｲ
+;
+;--- ｼﾌﾄJIS => ｸﾃﾝｺｰﾄﾞ
+SJIS:	LD	HL,0162H
+	LD	A,E
+	CP	9FH
+	JR	NC,SJIS1
+	LD	HL,00C0H
+	CP	7FH
+	JR	NC,SJIS1
+	INC	L
+SJIS1:	LD	A,D
+	SUB	81H
+	ADD	A,A
+	LD	D,A
+	ADD	HL,DE
+;--- ｸﾃﾝｺｰﾄﾞ => Kanjiｺｰﾄﾞ
+;SJIS0+23
+KUTEN:	LD	B,L
+	LD	L,H
+	LD	E,H
+	LD	H,0
+	LD	D,H
+	ADD	HL,HL
+	ADD	HL,DE
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,E
+	CP	010H
+	JR	C,KUTEN1
+	DEC	H
+	DEC	H
+KUTEN1:	LD	E,B
+	ADD	HL,DE
+	RET
+;------------------------
+SLTHAL:	DEFB	00H
+TOFU:	DEFB	255,255,255,255,255,255,255,255,255
+	DEFB	255,255,255,255,255,255,255,255,255
+
+	.dephase
+
+	end

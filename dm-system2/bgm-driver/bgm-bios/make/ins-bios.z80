@@ -1,0 +1,29 @@
+;===== BGM-BIOS Installer =====
+;(C)1998 GIGAMIX/Influenza
+;1999/11/20
+
+	.z80
+	cseg
+
+CALSLT	equ	001ch
+BLTRVR	equ	408fh
+RAMAD1	equ	0f341h
+
+;====================================
+
+MAIN::
+	LD	HL,DRIVER
+	LD	DE,0400h
+	ld	bc,1E00h
+	CALL	BLOCK
+	RET
+
+;------------------------
+BLOCK:	XOR	A
+	LD	IX,BLTRVR
+	LD	IY,(RAMAD1-1)
+	JP	CALSLT
+;------------------------
+DRIVER:
+
+	END

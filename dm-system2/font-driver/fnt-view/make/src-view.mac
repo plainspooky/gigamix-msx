@@ -1,0 +1,402 @@
+;=== MSX-View漢字ROMｶｰﾄﾘｯｼﾞ･12ﾄﾞｯﾄ漢字ﾄﾞﾗｲﾊﾞ ROMｻｰﾁ ===
+;(C)1997-2000 GIGAMIX/Influenza/Itaro/Goripon
+;Special Thanks "A to C"
+;	b981115a	beta
+;	r981115a	release
+;	b990515a	beta
+;	r000806a	release FS-A1WX/WSXへのｲﾝｽﾄｰﾙ時ﾊﾝｸﾞｱｯﾌﾟ回避(SEARCH.MAC)
+;	r000809a	release ﾄﾞﾗｲﾊﾞｻｲｽﾞの超過(4ﾊﾞｲﾄ)を修正(FNT-VIEW.MAC)
+;	r010711a	release FS-CM1挿入状態で検索後不安定になる問題の修正(SRC-VIEW.MAC)
+
+;****** ｱｾﾝﾌﾞﾗ設定
+	.z80
+	cseg
+
+;****** ﾗﾍﾞﾙ定義
+RDSLT			equ	00Ch
+CALSLT			equ	01Ch
+ENASLT			equ	024h
+ROMID			equ	02Dh
+;------
+FNTSIZ			equ	300h+175
+EXTFNT			equ	300h+193
+;xSIZ16			equ	FNTSIZ+0
+xSIZ12			equ	FNTSIZ+6
+xSIZEX			equ	FNTSIZ+12
+BLTRVR			equ	408Fh
+;xFNT16			equ	7400h
+xFNT12			equ	7600h
+Driver12Data		equ	xFNT12+3Bh
+DriverExData		equ	xFNT12+33h
+;------
+ReadBank8		equ	7FF4h
+;ReadBankA		equ	7FF5h
+ReadBankMsb		equ	7FF8h
+ReadBankCtrl		equ	7FF9h
+WriteBank4		equ	6000h
+WriteBank6		equ	6800h
+WriteBank8		equ	7000h
+WriteBankA		equ	7800h
+WriteBankMsb		equ	7FF8h
+WriteBankCtrl		equ	7FF9h
+;------
+ID_OPLL			equ	401Ch
+ID_CM1			equ	4010h
+ID_MEGASCSI		equ	7FE0h
+;SPCFNC			equ	7FCCh
+ISPCFNC			equ	7FCDh
+;------
+RAMAD0			equ	0F341h
+RAMAD1			equ	0F342h
+RAMAD2			equ	0F343h
+MASTERS			equ	0F348h
+DRVTBL			equ	0FB21h
+EXPTBL			equ	0FCC1h
+KBUF			equ	0F41Fh
+;------
+SaveStack		equ	KBUF
+InternalStack		equ	KBUF+318
+
+;****** ｲﾝｽﾄｰﾗ ｻｰﾁﾌﾟﾛｸﾞﾗﾑ
+SRCHVIW::
+	call	SearchKanjiRom
+	ei
+	cp	0FFh
+	ret	nz
+	ld	e,19
+	jp	406Fh
+
+;****** ｲﾝｽﾄｰﾗ ﾃﾞｰﾀｾｯﾄﾌﾟﾛｸﾞﾗﾑ
+SETDATA::
+	ex	de,hl
+	ld	a,(FoundRomtype)
+	and	(hl)
+	inc	hl
+	or	(hl)
+	inc	hl
+	ld	(FoundRomtype),a
+	ld	e,(hl)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	push	hl
+	ld	hl,(FoundBank12)
+	add	hl,de
+	ld	(FoundBank08),hl
+	ld	hl,FoundStatus
+	ld	de,Driver12Data
+	ld	bc,6
+	xor	a
+	ld	ix,BLTRVR
+	ld	iy,(RAMAD1-1)
+	call	CALSLT
+	pop	hl
+	push	hl
+	ld	de,xSIZ12
+	ld	bc,6
+	xor	a
+	ld	ix,BLTRVR
+	ld	iy,(RAMAD0-1)
+	call	CALSLT
+	pop	hl
+	ld	bc,6
+	add	hl,bc
+	ld	de,DriverExData
+	xor	a
+	ld	ix,BLTRVR
+	ld	iy,(RAMAD1-1)
+	jp	CALSLT
+
+;****** MSX-View互換漢字ROMｶｰﾄﾘｯｼﾞの検索
+SearchKanjiRom:
+;------
+	ld	hl,EXPTBL
+	ld	b,4
+skr1:	ld	c,b
+	ld	b,4
+	bit	7,(hl)
+	jr	nz,skr2
+	ld	b,1
+skr2:	ld	a,b
+	dec	a
+	add	a,a
+	add	a,a
+	add	a,c
+	dec	a
+	or	(hl)
+	jp	m,skr3
+	or	00001100b
+skr3:	xor	00001111b
+	push	bc
+	push	hl
+	call	CheckKanjiRom
+	pop	hl
+	pop	bc
+	cp	0ffh
+	ret	nz
+	djnz	skr2
+	ld	b,c
+	inc	l
+	djnz	skr1
+;------
+	ld	a,(ROMID)
+	cp	3
+	jr	nz,skr4
+	ld	a,(0c49h)
+	or	a
+	jr	nz,skr4
+	ld	hl,(1a74h)
+	ld	de,0e9dbh
+	or	a
+	sbc	hl,de
+	jr	nz,skr4
+	ld	hl,(1a7bh)
+	sbc	hl,de
+	jr	nz,skr4
+	ld	hl,160
+	ld	(FoundBank12),hl
+	ld	a,8fh
+	ld	(FoundSlot),a
+	ld	de,StatusFsa1gt
+	ret
+skr4:	ld	a,0ffh
+	ld	(FoundSlot),a
+	ret
+
+;****** MSX-View互換漢字ROMｶｰﾄﾘｯｼﾞの検査
+CheckKanjiRom:
+	di
+	ld	(SaveStack),sp
+	ld	sp,InternalStack
+	ld	(FoundSlot),a
+	ld	h,40h
+	call	ENASLT
+	ld	a,(FoundSlot)
+	ld	h,80h
+	call	ENASLT
+;------
+	ld	hl,4000h		;RAMの判定
+	ld	a,(hl)
+	ld	b,a
+	cpl
+	ld	(hl),a
+	cp	(hl)
+	ld	(hl),b
+	jp	z,NotKanjiRom		;RAMなので漢字ROM判定をｽｷｯﾌﾟ
+;------
+	ld	de,IdStringOpll		;FM音源判定
+	ld	hl,ID_OPLL
+	call	StringCompare
+	jp	z,NotKanjiRom		;FM音源ｶｰﾄﾘｯｼﾞなので漢字ROM判定をｽｷｯﾌﾟ
+;------
+	ld	de,IdStringCM1		;FS-CM1判定
+	ld	hl,ID_CM1
+	call	StringCompare
+	jp	z,NotKanjiRom		;FS-CM1なので漢字ROM判定をｽｷｯﾌﾟ
+;------
+	ld	a,(FoundSlot)		;ﾃﾞｨｽｸI/F関連ｶｰﾄﾘｯｼﾞの判定
+	ld	hl,(MASTERS)
+	cp	l
+	jp	z,mschk			;ﾏｽﾀｰｽﾛｯﾄなのでMegaSCSI判定へ
+	ld	hl,DRVTBL
+	ld	b,4
+dskchk:	ld	a,(hl)
+	or	a
+	jr	z,notdsk		;ﾃﾞｨｽｸI/Fではなかったので次の判定へ
+	inc	l
+	ld	a,(FoundSlot)
+	cp	(hl)
+	jp	z,mschk			;ﾃﾞｨｽｸI/FなのでMegaSCSI判定へ
+	inc	l
+	djnz	dskchk
+	jr	notdsk			;ﾃﾞｨｽｸI/Fではなかったので次の判定へ
+mschk:	ld	de,IdStringMegascsi	;MegaSCSI判定
+	ld	hl,ID_MEGASCSI
+	call	StringCompare
+	jp	nz,NotKanjiRom		;MegaSCSIではないので漢字ROM判定をｽｷｯﾌﾟ
+	ld	a,0a0h			;MegaSCSI仕様の獲得
+	call	ISPCFNC
+	ld	de,0
+	ld	bc,128
+	or	a
+	jp	z,MegascsiTypeCheck	;似非RAMなのでMEGA-SCSIﾀｲﾌﾟ漢字判定へ
+;;	ld	de,0
+	ld	bc,64
+	cp	2
+	jp	z,MegascsiTypeCheck	;MegaSCSIなのでMEGA-SCSIﾀｲﾌﾟ漢字判定へ
+	jp	NotKanjiRom		;それ以外のﾀｲﾌﾟなので漢字ROM判定をｽｷｯﾌﾟ
+notdsk:
+;------
+	xor	a			;ﾊﾟﾅｿﾆｯｸﾒｶﾞﾛﾑﾊﾞﾝｸの判定
+	ld	(WriteBankCtrl),a
+	ld	de,(ReadBank8)
+	dec	a
+	ld	(WriteBankCtrl),a
+	ld	hl,(ReadBank8)
+	xor	a
+	sbc	hl,de
+	ld	de,0
+	ld	bc,512
+	jp	nz,PanasonicTypeCheck	;ﾊﾟﾅｿﾆｯｸﾀｲﾌﾟなのでﾊﾟﾅｿﾆｯｸﾀｲﾌﾟ漢字判定へ
+;------
+;;	ld	de,0			;判別不能なので強制ｱｽｷｰﾀｲﾌﾟ漢字判定(^^;)
+	ld	bc,256
+	xor	a			;MegaSCSIﾀｲﾌﾟﾒｶﾞｺﾝのための初期化
+	ld	(WriteBank4),a
+	ld	(WriteBank6),a
+	ld	(WriteBank8),a
+	ld	(WriteBankA),a
+MegascsiTypeCheck:
+	xor	a			;ﾊﾟﾅｿﾆｯｸﾀｲﾌﾟﾌﾗｸﾞOFF
+	ld	(FoundRomType),a
+ascchk:	ld	a,e			;ﾊﾞﾝｸ切り替え
+	ld	(WriteBank8),a
+	inc	de
+	call	CurrentBankCheck	;ｶﾚﾝﾄﾊﾞﾝｸの判定
+	ld	a,0			;ﾊﾞﾝｸ復帰
+	ld	(WriteBank8),a
+	jp	z,FoundKanjiRom		;漢字ROMだったので判定終了
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,ascchk
+	jp	NotKanjiRom		;漢字ROMではなかった
+;------
+PanasonicTypeCheck:
+	ld	a,(ReadBank8)		;ﾊﾞﾝｸﾚｼﾞｽﾀ保存
+	ld	(SaveBank8),a
+	ld	a,(ReadBankMsb)
+	ld	(SaveBankMsb),a
+	ld	a,80h			;ﾊﾟﾅｿﾆｯｸﾀｲﾌﾟﾌﾗｸﾞON
+	ld	(FoundRomtype),a
+;;	ld	a,00010000b		;ﾊﾞﾝｸｺﾝﾄﾛｰﾙﾚｼﾞｽﾀを初期値に戻す
+;;	ld	(WriteBankCtrl),a
+panchk:	ld	a,e			;ﾊﾞﾝｸ切り替え
+	ld	(WriteBank8),a
+	ld	a,d
+	rlca
+	rlca
+	rlca
+	rlca
+	ld	(WriteBankMsb),a
+	inc	de
+	call	CurrentBankCheck	;ｶﾚﾝﾄﾊﾞﾝｸの判定
+	ld	a,(SaveBankMsb)		;ﾊﾞﾝｸ復帰
+	ld	(WriteBankMsb),a
+	ld	a,(SaveBank8)
+	ld	(WriteBank8),a
+	jp	z,FoundKanjiRom		;漢字ROMだったので判定終了
+	dec	bc
+	ld	a,b
+	or	c
+	jr	nz,panchk
+;;	jp	NotKanjiRom		;漢字ROMではなかった
+;------
+NotKanjiRom:
+	ld	a,(EXPTBL)		;ｽﾛｯﾄを復帰
+	ld	h,40h
+	call	ENASLT
+	ld	a,(RAMAD2)
+	ld	h,80h
+	call	ENASLT
+	ld	sp,(SaveStack)		;ｽﾀｯｸを復帰
+	ei
+	ld	a,0ffh			;0ffhを返す
+	ld	(FoundSlot),a
+	ret
+;------
+FoundKanjiRom:
+	push	hl
+	ld	(FoundBank12),de
+	ld	a,(EXPTBL)		;ｽﾛｯﾄを復帰
+	ld	h,40h
+	call	ENASLT
+	ld	a,(RAMAD2)
+	ld	h,80h
+	call	ENASLT
+	pop	de
+	ld	sp,(SaveStack)		;ｽﾀｯｸを復帰
+	ei
+	ld	a,(FoundSlot)		;現在のｽﾛｯﾄを返す
+	ret
+;------
+CurrentBankCheck:
+	exx				;ROMｶｰﾄﾘｯｼﾞIDの有無を判定
+	ld	hl,(8000h)
+	ld	de,'BA'
+	or	a
+	sbc	hl,de
+	exx
+	ret	nz			;IDが無いので漢字ROM先頭ﾊﾞﾝｸではない
+	exx				;Extended-Viewﾌｫﾝﾄ識別文字列の判定
+	ld	de,IdStringExtendedView
+	ld	hl,8010h
+	call	StringCompare
+	exx
+	ld	hl,StatusExtendedView
+	ret	z			;一致したので漢字ROM先頭ﾊﾞﾝｸ
+	exx				;MSX-Viewﾌｫﾝﾄ識別文字列の判定
+	ld	de,IdStringMsxView
+	ld	hl,8010h
+	call	StringCompare
+	exx
+	ld	hl,StatusMsxView
+	ret	z			;一致したので漢字ROM先頭ﾊﾞﾝｸ
+	ret
+;------
+StringCompare:
+	ld	a,(de)
+	or	a
+	ret	z
+	cp	(hl)
+	ret	nz
+	inc	de
+	inc	hl
+	jr	StringCompare
+
+;****** ﾜｰｸｴﾘｱ
+FoundStatus:
+FoundSlot:
+	db	0ffh
+FoundRomtype:
+	db	0
+FoundBank12:
+	dw	0
+FoundBank08:
+	dw	0
+SaveBankMsb:
+	db	0
+SaveBank8:
+	db	0
+
+;****** 各ｶｰﾄﾘｯｼﾞ用ﾃﾞｰﾀ
+IdStringOpll:
+	db	'OPLL',0
+IdStringCM1:
+	db	'JWrite EXTEND   ',0
+IdStringMegascsi:
+	db	'MEGASCSI',0
+IdStringMsxView:
+	db	'MSXViewKROM 1.0',0
+IdStringExtendedView:
+	db	'MSXViewKROM&2nd',0
+StatusMsxView:
+	db	11111110b
+	db	00000000b
+	dw	17
+	db	 6,12, 12,12, 12,12
+	db	 6, 8, 12, 8,  0, 0
+StatusExtendedView:
+	db	11111110b
+	db	00000001b
+	dw	17
+	db	 6,12, 12,12, 12,12
+	db	 6, 8, 12, 8, 12, 8
+StatusFsa1gt:
+	db	01111110b
+	db	10000001b
+	dw	64
+	db	 6,12, 12,12,  0, 0
+	db	 6, 8, 12, 8,  0, 0
+
+	end

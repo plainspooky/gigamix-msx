@@ -1,0 +1,58 @@
+;=== Install Font Driver ' Standard KanjiROM ' ===
+;(C)1998 GIGAMIX/Influenza
+;98/06/29
+
+; 標準漢字ROMがあるかどうか調べる
+; あれば z 無ければ nz
+
+	.z80
+	cseg
+
+	public	krom_search,krom_2nd
+
+SRCHKR::
+krom_search:
+;------------------------
+; バックスラッシュ(JIS:2140h)を調べる
+
+isExist?:
+	LD	A,000000B	;0080h low 6 bit
+	OUT	(0D8H),A
+	LD	A,000010B	;0080h high 6 bit
+	OUT	(0D9H),A
+
+	LD	HL,CP_DATA
+	LD	B,8
+isExist?_Loop:
+	IN	A,(0D9H)
+	CP	(HL)
+	RET	NZ
+	INC	HL
+	DJNZ	isExist?_Loop
+
+	RET
+
+CP_DATA:
+	DEFB	00H,40H,20H,10H,08H,04H,02H,01H
+;------------------------
+krom_2nd:
+
+; 0d7eh 00001101 01111110
+	ld	a,111110b
+	out	(0dah),a
+	ld	a,110101b
+	out	(0dbh),a
+
+	ld	b,8
+	ld	c,0dbh
+	xor	a
+krom_2nd_loop:
+	in	e,(c)
+	add	a,e
+	djnz	krom_2nd_loop
+
+        cp	95h
+	ret
+
+
+	END

@@ -1,0 +1,215 @@
+;=== Font Driver ' ANK ' ===
+;                       (C)1997 GIGAMIX/Influenza
+
+	.z80
+	cseg
+
+	public	ANK_fontdriver
+
+DAKFLG	EQU	0FC3FH	;DaKuon Flag
+TF	EQU	83H	;TouFu Character
+LINWRK	equ	0fc18h
+
+;-----------------------
+;	DEFB	 8, 8	;Ank Size
+;	DEFB	16,16	;Wide ANK
+;	DEFB	 0, 0	;Unsupported
+;-----------------------
+
+
+ANK_fontdriver:
+	.phase	7400h
+
+;		 0....5....10...15...20...25...30...35...
+	DEFM	'FontDriver:ROM ANK Converter  /Influenza'
+	DEFB	1AH
+	DEFB	0,1	;FntDRV,Size16x16
+	DEFS	5
+;======================================
+CODE:	XOR	A
+	LD	(DAKFLG),A
+	OR	B
+	JR	NZ,ZEN
+;------------------------------
+HAN:	LD	A,E
+	LD	HL,TWIN
+	LD	C,08H	;LD	BC,??08H
+	JR	FONT
+;^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ZEN:	EX	DE,HL
+	CALL	CONV
+	LD	HL,WIDE
+	LD	C,10H	;LD	BC,??10H
+;------------------------------
+FONT:	LD	(SWFONT+1),HL
+	PUSH	BC
+	LD	IX,0105H
+	CALL	015FH
+	LD	HL,0FC40H
+	LD	DE,LINWRK
+	PUSH	DE
+	EXX
+	LD	B,8
+FONT0:	EXX
+	LD	C,(HL)
+	INC	HL
+SWFONT:	CALL	TWIN	;WIDE
+	INC	DE
+	INC	DE
+	EXX
+	DJNZ	FONT0
+	POP	HL		;LD	HL,LINWRK
+	POP	DE		;LD	DE,1010H
+	LD	BC,0010H
+	LD	D,C
+	LD	A,(DAKFLG)
+	OR	A
+	RET	Z
+	INC	HL
+	DEC	A
+	JR	NZ,HANDAK
+DAKUON:	LD	(HL),66H
+	INC	HL
+	INC	HL
+	LD	(HL),33H
+	JR	HANDA0
+HANDAK:	LD	(HL),3CH
+	INC	HL
+	INC	HL
+	LD	(HL),66H
+	INC	HL
+	INC	HL
+	LD	(HL),3CH
+HANDA0:	LD	HL,LINWRK
+	RET
+;================================
+WIDE:	CALL	WIDE0
+WIDE0:	LD	B,4
+WIDE1:	RLA
+	RLC	C
+	RRA
+	RLCA
+	RLA
+	DJNZ	WIDE1
+WIDE2:	LD	(DE),A
+	INC	DE
+	INC	DE
+	LD	(DE),A
+	DEC	DE
+	RET
+
+TWIN:	LD	A,C
+	CALL	WIDE2
+	JR	WIDE2
+;============================
+CONV:	LD	DE,839EH	;Kanji
+	RST	20H
+	JR	C,KATA
+	LD	DE,KNJTBL
+	LD	C,1
+KJ0:	LD	A,(DE)
+	INC	DE
+	CP	L
+	JR	NZ,KJ1
+	LD	A,(DE)
+	CP	H
+	LD	A,C
+	RET	Z
+KJ1:	INC	DE
+	INC	C
+	LD	A,C
+	CP	17
+	JR	NZ,KJ2
+	ADD	A,12
+	LD	C,A
+KJ2:	CP	17+12+3
+	JR	C,KJ0
+	LD	A,TF
+	RET
+;-----------
+KATA:	LD	DE,8340H	;KATA KANA
+	RST	20H
+	JR	C,HIRA
+	SBC	HL,DE
+	BIT	6,L
+	JR	Z,$+3
+	DEC	L
+;
+CHKDAK:	LD	DE,KNATBL
+	ADD	HL,DE
+	LD	A,(HL)
+	CP	'ﾞ'
+	RET	C
+	SUB	'ﾞ'
+	JR	Z,$+3
+	DEC	HL
+	DEC	HL
+	INC	A
+	LD	(DAKFLG),A
+	LD	A,(HL)
+	RET
+;-----------
+HIRA:	LD	DE,829FH	;HIRA GANA
+	RST	20H
+	JR	C,ABC
+	SBC	HL,DE
+	CALL	CHKDAK
+	SUB	32
+	CP	0A0H
+	JR	C,$+4
+	ADD	A,64
+	RET
+;-----------
+ABC:	LD	DE,824FH	;012 ABC abc
+	RST	20H
+	JR	C,KIGOU
+	LD	A,L
+	SUB	4FH-'0'
+	CP	'a'
+	RET	C
+	DEC	A
+	RET
+;-----------
+KIGOU:	LD	DE,8140H	;KIGOU
+	OR	A
+	SBC	HL,DE
+	LD	DE,KIGTBL
+	ADD	HL,DE
+	LD	A,(HL)
+	RET
+;===============================
+; KANA Table
+KNATBL:	DEFM	'ｧｱｨｲｩｳｪｴｫｵｶﾞｷﾞｸ'
+	DEFM	'ﾞｹﾞｺﾞｻﾞｼﾞｽﾞｾﾞｿﾞﾀ'
+	DEFM	'ﾞﾁﾞｯﾂﾞﾃﾞﾄﾞﾅﾆﾇﾈﾉﾊ'
+	DEFM	'ﾞﾟﾋﾞﾟﾌﾞﾟﾍﾞﾟﾎﾞﾟﾏﾐ'
+	DEFM	'ﾑﾒﾓｬﾔｭﾕｮﾖﾗﾘﾙﾚﾛﾜﾜ'
+	DEFM	'ｲｴｦﾝ'
+; KIGOU Table
+KIGTBL:	DEFM	' ､｡,.･:;?!ﾞﾟ'
+	DEFB	27H
+	DEFM	'`~^-_'
+	DEFB	TF,TF,TF,TF,TF,TF,TF,TF,84H,0B0H,17H,2DH,2FH
+	DEFB	TF,7EH,TF,16H,0A5H,0A5H,27H,27H,22H,22H
+	DEFM	'()[][]{}<><>｢｣｢｣[]+-'
+	DEFB	46H
+	DEFM	'x /='
+	DEFB	TF
+	DEFM	'<>'
+	DEFB	TF,TF,TF,TF,TF,TF
+	DEFM	'ﾟ'
+	DEFB	27H
+	DEFM	'"C\$'
+	DEFB	TF,TF
+	DEFM	'%#&*@$'
+	DEFB	80H,82H,84H,85H,84H,83H,83H,0DBH,0DBH,80H,80H,81H,81H
+	DEFM	'*ﾃ><^v='
+; Graph Kanji Table
+KNJTBL:	DEFW	8C8EH,89CEH,9085H,96D8H,8BE0H,9379H,93FAH,944EH
+	DEFW	897EH,8E9EH,95AAH,9562H,9553H,90E7H,969CH,83CEH
+	DEFW	91E5H,9286H,8FACH
+;===============================
+
+	.dephase
+
+	end

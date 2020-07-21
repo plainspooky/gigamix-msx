@@ -1,0 +1,739 @@
+;===== DM-system2 [Standard SE Driver 2] =====
+;(C)1999 GIGAMIX/S.GYRO/Mattya/Influenza
+;1999/09/15 - 1999/09/20
+;Time-stamp: <99/10/23 12:14:28 influenz>
+
+;注意点
+; メモリ配置制限 : 2800hのみ
+
+	.z80
+	cseg
+
+	include DRIVERS.H
+	include DS2ENTRY.H
+
+FNTSTR	equ	0F87Fh		; Function Key String Area
+
+
+TH_LOOP_COUNT	equ	0	; ループカウンタ
+MAX_LOOP_LEVEL	equ	8	; 最大ループレベル
+
+TH_TIMER_COUNT	equ	8	; 次の発声カウント
+TH_DATA_ADDRESS	equ	9	; データへのポインタ
+
+TH_POLTA_VALUE	equ	11	; ポルタメント増減値(-8 ~ +7)
+TH_POLTA_COUNT	equ	12	; 次のポルタメントカウント
+TH_POLTA_TIME	equ	13	; ポルタメント周期
+
+TH_DITUNE_VALUE	equ	14	; ディチューン (-32758 ~ +32767)
+TH_TONE_VALUE	equ	16	; トーン値
+TH_VOLUME_VALUE	equ	18	; 音量 (0-15)
+TH_MIXER_FLAG	equ	19	; ミキサー (000N00T0 N:oise T:one)
+TH_NOISE_VALUE	equ	20	; ノイズ値
+
+TH_FLAG		equ	21	; フラグ BGM停止 & 排他
+TH_PRIORITY	equ	22	; 優先順位 (higher 0 ~ 15 lower)
+TH_LIFE_TIME	equ	23	; 生存年齢 (0 -> 255)
+
+TH_LENGTH	equ	24
+
+	.phase	ADDR_SE
+
+x2800:
+;----------------------------------
+;		 0....5....10...15...20...25...30...35...
+	defm	'DM_Standard_SE_Drvier2 ver0.10(c)GIGAMIX'
+	defb	EOF
+	defb	DRIVER_ID_SE
+	DEFS	6, 0
+
+	jp	sestart
+	jp	timise
+
+;==================================
+; 割込み処理
+;[In]	none
+
+timise:
+	ld	a,7
+	out	(0A0h),a
+	in	a,(0A2h)
+	ld	e,a
+	exx
+
+; -- Channel A --
+	ld	hl,ch_A + TH_PRIORITY
+	ld	a,(hl)
+	inc	a
+	jr	z,play_A_end
+
+	exx
+	ld	a,e
+	and	0F6h
+	ld	d,a
+	ld	hl,ch_A + TH_MIXER_FLAG
+	ld	a,(hl)
+	rrca
+	or	d
+	ld	e,a
+	exx
+
+	ld	a,(current_timer)
+	call	run
+	ld	a,0
+	call	wrtreg
+
+play_A_end:
+
+; -- Channel B --
+play_B:
+	ld	hl,ch_B + TH_PRIORITY
+	ld	a,(hl)
+	inc	a
+	jr	z,play_B_end
+
+	exx
+	ld	a,e
+	and	0EDh
+	ld	d,a
+	ld	hl,ch_B + TH_MIXER_FLAG
+	ld	a,(hl)
+	or	d
+	ld	e,a
+	exx
+	ld	a,(current_timer)
+	call	run
+	ld	a,1
+	call	wrtreg
+
+play_B_end:
+
+
+; -- Channel C --
+play_C:
+	ld	hl,ch_C + TH_PRIORITY
+	ld	a,(hl)
+	inc	a
+	jr	z,play_C_end
+
+	exx
+	ld	a,e
+	and	0DBh
+	ld	d,a
+	ld	hl,ch_C + TH_MIXER_FLAG
+	ld	a,(hl)
+	rlca
+	or	d
+	ld	e,a
+	exx
+	ld	a,(current_timer)
+	call	run
+	ld	a,2
+	call	wrtreg
+
+play_C_end:
+
+; -- Mixer --
+	exx
+	ld	a,7
+	out	(0A0h),a
+	ld	a,e
+	out	(0A1h),a
+
+;	inc	l
+;	ld	e,(hl)		; ノイズ
+;	inc	l
+;	ld	a,(hl)		; ミキサー
+;	rrca
+;	or	d
+
+	ld	hl,current_timer
+	inc	(hl)
+
+	ret
+
+;---------------------------------
+wrtreg:
+	ld	l,TH_TONE_VALUE
+	ld	e,(hl)		; トーン
+	inc	l
+	ld	d,(hl)
+	inc	l
+
+	add	a,a
+	ld	c,0A1h
+	out	(0A0h),a
+	out	(c),e
+
+	inc	a
+	out	(0A0h),a
+	out	(c),d
+
+	srl	a
+	or	08h
+	out	(0A0h),a
+	ld	l,TH_VOLUME_VALUE
+	ld	a,(hl)		; 音量
+	out	(c),a
+
+	ret
+
+;==============================================================
+x28xx:
+	defs	100h - ( x28xx - x2800 ), 0EEh
+
+ch_A:
+	defs	TH_LENGTH, 0FFh
+
+;==============================================================
+
+;---------------------------------
+;[In]	h : Thread Work High ( 29h / 2Ah / 2Bh )
+;	a : Current Timer
+
+run:
+	ld	l,TH_POLTA_VALUE
+	ld	c,(hl)		; ポルタメント値
+	inc	c
+	dec	c
+	jr	z,run_polta_z	; ポルタメント値が 0 なら処理しない
+
+	inc	l
+	cp	(hl)		; ポルタメントカウントチェック
+	jr	nz,run_polta_z
+
+	inc	l
+	ld	b,(hl)		; ポルタメント周期
+	dec	l
+	add	a,b
+	ld	(hl),a		; ポルタメント周期を加算して次回に備える
+	sub	b
+
+	ex	af,af'		; タイマーカウント保存
+	ld	l,TH_TONE_VALUE
+	ld	e,(hl)		; トーン low
+	inc	l
+	ld	d,(hl)		; トーン high
+	ex	de,hl
+	ld	a,c
+	rla
+	sbc	a,a
+	ld	b,a
+	add	hl,bc
+	ex	de,hl
+	ld	(hl),d
+	dec	l
+	ld	(hl),e
+	ex	af,af'
+
+run_polta_z:
+	ld	l,TH_TIMER_COUNT
+	cp	(hl)		; 割込みカウントチェック
+	ret	nz
+
+	inc	l
+	ld	c,(hl)		; データ列へのポインタ
+	inc	l
+	ld	b,(hl)
+
+;//////////////////////////////////////////////////////////////
+;HL = スレッドエリア
+;BC = SEデータアドレス
+
+run_begin:
+	ld	a,(bc)		; SEデータフェッチ
+	inc	bc
+
+	add	a,a
+	jr	c,run_80
+	jp	p,run_00
+
+;-- 再生終了またはループ ----
+;+0 01WWWWWW	Wait
+;+1 LLLCCCCC	loop Level/loop Count
+;+2 AAAAAAAA	jump Address
+run_40:
+	and	7Eh
+	jr	z,run_data_end	; W=0 なら再生終了
+
+	ex	af,af'
+	ld	a,(bc)		; 深さ & ループ回数 (C=0:無限)
+	inc	bc
+	ld	e,a
+	and	1Fh
+	jr	z,run_loop_jump	; ループ回数が 0 なので無限ループ
+	ld	d,a
+	xor	e
+	rlca
+	rlca
+	rlca
+	ld	l,a		; ループカウントテーブル
+	dec	(hl)
+	jr	z,run_loop_break; カウンタが 0 になったらループ脱出
+	jp	p,run_loop_jump	; カウンタが 1 以上なら次の周回へ
+	ld	(hl),d		; カウンタが -1 ならループカウンタをセット
+
+run_loop_jump:
+	ld	a,(bc)		; ループ先頭へ相対ジャンプ
+	dec	bc
+	dec	bc
+	add	a,c
+	ld	c,a
+	jr	c,run_loop_jump0
+	dec	b
+run_loop_jump0:
+	dec	bc
+run_loop_break:
+	inc	bc
+	ex	af,af'
+
+;-- 次の割込み待ち ----
+;+0 00WWWWWW	Wait
+run_00:
+	rrca
+	ld	l,TH_TIMER_COUNT
+	add	a,(hl)
+	ld	(hl),a		; 次回割込みカウント
+	inc	l
+	ld	(hl),c
+	inc	l
+	ld	(hl),b
+	ret
+
+run_data_end:
+	ld	l,TH_PRIORITY
+	ld	(hl),0FFh
+	ret
+
+run_80:
+	jp	m,run_C0
+
+;-- ミキサー/音量の直接指定
+;+0 10ntvvvv	Noise/Tone/Volume
+
+run_mix:
+	rrca
+	ld	d,a
+	ld	l,TH_VOLUME_VALUE
+	and	0Fh
+	ld	(hl),a
+
+	ld	a,d
+	and	10h
+	rrca
+	rrca
+	ld	e,a
+	ld	a,d
+	and	20h
+	or	e
+	rrca
+
+	inc	l
+	ld	(hl),a
+	jp	run_begin
+
+run_C0:
+	bit	6,a
+	jr	nz,run_E0
+	bit	5,a
+	jr	nz,run_D0
+
+; -- トーンの直接指定 ----
+;+0 1100hhhh	Tone high
+;+1 llllllll	Tone low
+
+	rrca
+	and	0Fh
+	ld	d,a
+	ld	a,(bc)
+	inc	bc
+
+	ld	l,TH_DITUNE_VALUE
+	add	a,(hl)		; ディチューン low
+	ld	e,a
+	inc	l
+	ld	a,(hl)		; ディチューン high
+	adc	a,d
+	inc	l
+	ld	(hl),e
+	inc	l
+	ld	(hl),a
+	jp	run_begin
+
+;-- 音量の相対指定 ----
+;+0 1101vvvv relative volume
+run_D0:
+	rrca
+	and	0Fh
+	ld	l,TH_VOLUME_VALUE
+	add	a,(hl)
+	sub	8
+	ld	(hl),a
+	jp	run_begin
+
+run_E0:
+	bit	5,a
+	jr	nz,run_F0
+;-- ポルタメント ----
+;+0 1110pppp -8 ~ +7
+;+1 tttttttt time
+	rrca
+	and	0Fh
+	sub	8
+	ld	l,TH_POLTA_VALUE
+	inc	l
+	inc	l
+	inc	l
+	ld	(hl),a
+	inc	l
+	ld	a,(bc)
+	inc	bc
+	ld	(hl),a
+
+	ld	l,e
+	jp	(iy)
+
+;-- ノイズの直接指定 ----
+;+0 1101nnnn	Noise / 2
+run_F0:
+	and	1Eh
+	ld	d,a
+	ld	a,l
+	add	a,TH_NOISE_VALUE - TH_TIMER_COUNT
+	ld	l,a
+	ld	(hl),d
+
+	ld	l,e
+	jp	(iy)
+
+;=============================================================
+x29xx:
+	defs	100h - ( x29xx - ch_A ), 0EEh
+
+ch_B:
+	defs	TH_LENGTH, 0FFh
+;=============================================================
+
+;//////////////////////////////////////////////////////////////
+
+;==================================
+; seplay
+; - 割り込み内から呼ばれるわけでもなく
+;   メモリ節約の必要性もないのでユルいコーディングで構わない
+;[In]	hl : data area address
+;	a : se# ( 1 - 255 = play , 0 = Stop )
+
+sestart:
+
+;--- stop all channels ?
+	or	a
+	jp	z,sestop
+
+;--- Data Number check
+	dec	a		; 0 - 254
+	cp	(hl)
+	ret	nc
+
+;--- seek directory
+	inc	hl
+	ld	e,a
+	ld	d,0
+	add	hl,de
+	add	hl,de
+	add	hl,de
+
+	ld	e,(hl)	; de = header address (relative)
+	inc	hl
+	ld	d,(hl)
+	inc	hl
+	ld	c,(hl)	; A = lx0000mm l:bgm pause flag  m:Number of channels
+	ld	a,c
+	and	03h
+	ret	z	; Number of Channels = 0 !?
+	ld	b,a
+	inc	hl
+	add	hl,de
+
+;--- prepare thread
+;[In]	hl = header address
+;	b = iterator
+;	c = Directory->Flag
+
+header_loop:
+	push	bc
+	push	hl
+
+	ld	a,(hl)		; Ditune & Priority
+	and	0Fh
+	push	hl
+	push	bc
+	call	allocWork
+	pop	bc
+	pop	de
+	call	c,initWork	; 割り当て成功なので初期化
+
+	pop	hl
+	pop	bc
+
+	inc	hl
+	inc	hl
+	inc	hl
+	djnz	header_loop
+
+;--- Life Time Proceed
+	ld	hl,ch_A + TH_LIFE_TIME
+	inc	(hl)
+	jr	nz,$+3
+	dec	(hl)
+
+	inc	h
+	inc	(hl)
+	jr	nz,$+3
+	dec	(hl)
+
+	inc	h
+	inc	(hl)
+	jr	nz,$+3
+	dec	(hl)
+
+	ret
+
+;---------------------------------------
+;[In]	hl = Work Address
+;	de = Header Address
+;	c = flag
+
+initWork:
+
+; Flag
+	ld	l,TH_FLAG
+	ld	(hl),c
+
+; Priority
+	ld	a,(de)
+	and	0Fh
+	ld	l,TH_PRIORITY
+	ld	(hl),a
+
+; Ditune
+	ld	a,(de)
+	and	0F0h
+	rrca
+	rrca
+	rrca
+	rrca
+	push	de
+	push	hl
+	ld	l,a
+	ld	h,0
+	ld	de,-8
+	add	hl,de
+	ex	de,hl
+	pop	hl
+	ld	l,TH_DITUNE_VALUE
+	ld	(hl),e
+	inc	l
+	ld	(hl),d
+	pop	de
+
+; Loop count
+	ld	l,TH_LOOP_COUNT
+	ld	b,MAX_LOOP_LEVEL
+initWork_0:
+	ld	(hl),0
+	inc	l
+	djnz	initWork_0
+
+; Timer Count
+	ld	l,TH_TIMER_COUNT
+	ld	a,(current_timer)
+	ld	c,a
+	inc	de
+	ld	a,(de)			; Delay
+	add	a,c
+	ld	(hl),a
+
+; Data Address
+	ld	l,TH_DATA_ADDRESS
+	inc	de
+	ld	a,(de)
+	inc	de
+	add	a,e
+	jr	nc,$+3
+	inc	d
+	ld	(hl),a
+	inc	l
+	ld	(hl),d
+
+; Poltament
+	ld	l,TH_POLTA_VALUE
+	ld	(hl),0
+
+; Tone
+	ld	l,TH_TONE_VALUE
+	ld	(hl),0FEh	; TH_TONE_VALUE ( o4A )
+	inc	l
+	ld	(hl),0
+
+; Volume
+	ld	l,TH_VOLUME_VALUE
+	ld	(hl),0		; TH_VOLUME_VALUE
+
+; Noise
+	ld	l,TH_NOISE_VALUE
+	ld	(hl),0		; TH_NOISE_VALUE
+
+; Mixer
+	ld	l,TH_MIXER_FLAG
+	ld	(hl),12h	; TH_MIXER_FLAG
+
+; Life time
+	ld	l,TH_LIFE_TIME
+	ld	(hl),0
+
+	ld	hl,BGFLAG
+	set	1,(hl)
+
+	ret
+
+;=============================================================
+x2Axx:
+	defs	100h - ( x2Axx - ch_B ), 0EEh
+
+ch_C:
+	defs	TH_LENGTH, 0FFh
+;=============================================================
+
+;-----------------------------------------------
+;[In]	a : 優先順位
+;	c : flag
+;[Out]	Cy set : 成功
+;	hl : スレッドエリア (offset +0)
+
+allocWork:
+
+; 同じ優先度で排他フラグの立っているデータが再生中ならそれを上書きする
+	bit	6,c
+	ld	c,a
+	call	nz,getXPrior
+
+; 現在再生中のデータのうちで一番優先順位の低いものを上書きする
+	call	nc,getLower
+
+	ret
+
+;-----------
+getXPrior:
+	call	getMaxChannels
+	ld	b,a
+	ld	hl,ch_A + TH_PRIORITY
+getXPrior_loop:
+	ld	a,(hl)
+	cp	c
+	jr	nz,getXPrior_0
+	dec	l		; TH_FLAG
+	bit	6,(hl)		; X flag
+	scf
+	ret	nz
+	inc	l
+getXPrior_0:
+	inc	h
+	djnz	getXPrior_loop
+	or	a
+
+	ret
+
+;-----------
+tempwork:
+	defb	0
+	defb	0
+
+getLower:
+	ld	de,tempwork
+	ld	a,c
+	ld	(de),a
+
+	call	getMaxChannels
+	ld	b,a
+	ld	hl,ch_A + TH_PRIORITY
+getLower_loop:
+	ld	a,(de)		; この時点で一番優先順位の低いデータ
+	cp	(hl)
+	jr	c,getLower_0	; より優先順位が低いのでこれを候補にする
+	jr	nz,getLower_1	; 優先順位が高いのでパス
+	inc	e
+	inc	l		; 優先順位が同じなら
+	ld	a,(de)		; より古い方を候補にする
+	cp	(hl)
+	dec	e
+	dec	l
+	jr	nc,getLower_1
+getLower_0:
+	ld	e,l
+	ld	d,h
+
+getLower_1:
+	inc	h
+	djnz	getLower_loop
+
+	ld	a,e
+	cp	low tempwork
+	ret	z
+	scf
+	ex	de,hl
+
+	ret
+
+;-----------
+getMaxChannels:
+	ld	a,(maxCh)
+	dec	a
+	cp	3
+	jr	c,getMaxChannels0
+	ld	a,2
+getMaxChannels0:
+	inc	a
+	ret
+
+
+;==================================
+; sestop
+
+sestop:
+	ld	hl,BGFLAG
+	res	1,(hl)
+
+	ld	bc,08A0h
+	xor	a
+	out	(c),b
+	out	(0A1h),a
+	inc	b
+	out	(c),b
+	out	(0A1h),a
+	inc	b
+	out	(c),b
+	out	(0A1h),a
+
+	ld	hl,ch_A + TH_PRIORITY
+	ld	(hl),255
+	inc	h
+	ld	(hl),255
+	inc	h
+	ld	(hl),255
+
+	ret
+
+;-------------------------------------
+current_timer:
+	defb	00
+
+maxCh:
+	defb	3
+
+;------------------------------------
+; ...bottom
+;------------------------------------
+	.dephase
+
+	end
+
