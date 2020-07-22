@@ -1,0 +1,198 @@
+; SE SampleData for Standard SE Driver 2
+;(C)1999 GIGAMIX/Influenza
+
+DIR_MULTIPLEX	equ	00h
+DIR_EXCLUSIVE	equ	40h
+
+DIR_CHANNEL1	equ	1
+DIR_CHANNEL2	equ	2
+DIR_CHANNEL3	equ	3
+
+DIR_BGM_PLAY	equ	00h
+DIR_BGM_PAUSE	equ	80h
+
+HEAD_DITUNE_m8	equ	0
+HEAD_DITUNE_m7	equ	1
+HEAD_DITUNE_m6	equ	2
+HEAD_DITUNE_m5	equ	3
+HEAD_DITUNE_m4	equ	4
+HEAD_DITUNE_m3	equ	5
+HEAD_DITUNE_m2	equ	6
+HEAD_DITUNE_m1	equ	7
+HEAD_DITUNE_0	equ	8
+HEAD_DITUNE_1	equ	9
+HEAD_DITUNE_2	equ	10
+HEAD_DITUNE_3	equ	11
+HEAD_DITUNE_4	equ	12
+HEAD_DITUNE_5	equ	13
+HEAD_DITUNE_6	equ	14
+HEAD_DITUNE_7	equ	15
+
+HEAD_PRIORITY00	equ	0
+HEAD_PRIORITY01	equ	1
+HEAD_PRIORITY02	equ	2
+HEAD_PRIORITY03	equ	3
+HEAD_PRIORITY04	equ	4
+HEAD_PRIORITY05	equ	5
+HEAD_PRIORITY06	equ	6
+HEAD_PRIORITY07	equ	7
+HEAD_PRIORITY08	equ	8
+HEAD_PRIORITY09	equ	9
+HEAD_PRIORITY10	equ	10
+HEAD_PRIORITY11	equ	11
+HEAD_PRIORITY12	equ	12
+HEAD_PRIORITY13	equ	13
+HEAD_PRIORITY14	equ	14
+HEAD_PRIORITY15	equ	15
+
+HEAD_DELAY	equ	0
+
+MIX_VOL_00	equ	0
+MIX_VOL_01	equ	1
+MIX_VOL_02	equ	2
+MIX_VOL_03	equ	3
+MIX_VOL_04	equ	4
+MIX_VOL_05	equ	5
+MIX_VOL_06	equ	6
+MIX_VOL_07	equ	7
+MIX_VOL_08	equ	8
+MIX_VOL_09	equ	9
+MIX_VOL_10	equ	10
+MIX_VOL_11	equ	11
+MIX_VOL_12	equ	12
+MIX_VOL_13	equ	13
+MIX_VOL_14	equ	14
+MIX_VOL_15	equ	15
+
+MIX_TONE_ON	equ	0
+MIX_TONE_OFF	equ	10h
+MIX_NOISE_ON	equ	0
+MIX_NOISE_OFF	equ	20h
+
+LOOP_LEVEL_0	equ	00h
+LOOP_LEVEL_1	equ	20h
+LOOP_LEVEL_2	equ	40h
+LOOP_LEVEL_3	equ	60h
+LOOP_LEVEL_4	equ	80h
+LOOP_LEVEL_5	equ	0A0h
+LOOP_LEVEL_6	equ	0C0h
+LOOP_LEVEL_7	equ	0E0h
+
+
+; ディレクトリ
+dir	macro	headaddr, numOfCh, flag
+	defw	headaddr - $ - 3
+	defb	numOfCh + flag
+	endm
+
+; ヘッダ
+header	macro	dataaddr, prior, ditune, delay
+	defb	ditune * 16 + prior
+	defb	delay
+	defb	dataaddr - $ - 1
+	endm
+
+; 音量とミキサー指定
+; mixer 15, 0, 1  音量15/トーンon/ノイズoff
+mixer	macro	vol, tone, noise
+	defb	128 + tone + noise + vol
+	endm
+
+; トーン直接指定
+; tone 0FEh       トーンo4a
+tone	macro	value
+	defb	0C0h + (high value)
+	defb	low value
+	endm
+
+; 音量相対指定
+volume	macro	value
+	defb	0D0h + value + 8
+	endm
+
+; ポルタメント
+polta	macro	value, time
+	defb	0E0h + value + 8
+	defb	time
+	endm
+
+; ノイズ
+noise	macro	value
+	defb	0F0h + value
+	endm
+
+; 割込み終了
+wait	macro	time
+	defb	time
+	endm
+
+; ループ
+loop	macro	level, addr, count, time
+	defb	40h + time
+	defb	level + count
+	defb	addr - ($ - 2)
+	endm
+
+; データ終了
+exit	macro
+	defb	40h
+	endm
+
+;----------------------------------------------------
+; データ数
+top:
+	defb	3
+
+;-----------------
+directory:
+	dir	head1, DIR_CHANNEL2, DIR_MULTIPLEX + DIR_BGM_PLAY
+
+	dir	head2, DIR_CHANNEL1, DIR_EXCLUSIVE + DIR_BGM_PLAY
+
+	dir	head3, DIR_CHANNEL1, DIR_EXCLUSIVE + DIR_BGM_PLAY
+
+;-----------------
+head1:
+	header	data1, HEAD_PRIORITY01, HEAD_DITUNE_0, HEAD_DELAY + 0
+	header	data1, HEAD_PRIORITY01, HEAD_DITUNE_1, HEAD_DELAY + 0
+
+head2:
+	header	data2, HEAD_PRIORITY02, HEAD_DITUNE_0, HEAD_DELAY + 0
+
+head3:
+	header	data3, HEAD_PRIORITY02, HEAD_DITUNE_0, HEAD_DELAY + 0
+
+;-----------------
+data1:
+	mixer	MIX_VOL_15, MIX_TONE_ON, MIX_NOISE_OFF
+	tone	0150h
+	wait	60
+
+	tone	0200h
+	wait	60
+
+	mixer	MIX_VOL_00, MIX_TONE_OFF, MIX_NOISE_OFF
+
+	exit
+
+data2:
+	mixer	MIX_VOL_15, MIX_TONE_ON, MIX_NOISE_OFF
+	tone	050h
+	wait	60
+data2_loop:
+	volume	-1
+	loop	LOOP_LEVEL_0, data2_loop, 14, 5
+
+	exit
+
+data3:
+	mixer	MIX_VOL_15, MIX_TONE_ON, MIX_NOSE_OFF
+	tone	0100h
+	polta	+1, 10
+	wait	60
+
+	exit
+
+;-----------------------------------------------------
+
+	end

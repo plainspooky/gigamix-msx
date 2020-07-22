@@ -1,0 +1,257 @@
+
+; 1bit sound port PCM driver
+; copyright 1994,1995  GIGAMIX/goripon
+; recreated by GIGAMIX/Mattya
+
+; driver address = 02c00h - 02fffh
+
+	.z80
+	cseg
+
+
+; ラベル、シンボル定義 ********************************************************
+cpuchg	equ	04022h
+cpuget	equ	04025h
+
+vdpin	equ	04304h		;ＶＤＰのＩ／Ｏポートアドレス (読み出し)
+vdp0	equ	098h
+vdp1	equ	099h
+sound.p	equ	0aah
+
+z80mode	equ	00000000b
+eof	equ	01ah
+
+
+; ドライバヘッダ **************************************************************
+;		*----+----*----+----*----+----*----+----*
+	db	'1bit sound port PCM driver   (c) GIGAMIX',eof
+	db	001d		;a kind of PCM driver
+	db	'hekiru'	;moe moe(ｵ
+	jp	pcmply
+
+
+; メインルーチン **************************************************************
+pcmply:
+	push	af
+	push	bc
+	push	de
+	push	hl
+
+	ld	hl,(vdpin)
+	inc	l
+	ld	a,h
+	ld	(swvdp0+1),a
+	ld	a,l
+	ld	(swvdp1+1),a
+
+
+; ＣＰＵ調節 ----------------------------------------------
+	call	cpuget
+	or	a
+	jr	z,skip
+
+	ld	(cpu.mode),a
+	ld	a,z80mode
+	call	cpuchg
+
+skip:
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af
+
+
+; ウェイト値設定 ------------------------------------------
+	di			;禁止
+	push	bc
+	push	de
+	push	hl
+
+	ld	b,a
+	and	00000011b
+	jr	z,rate15
+	cp	002d
+	jr	c,rate7
+	jr	z,rate5
+
+
+;3.9375KHz	3579545/15750=227.2726984127*4=909 states
+rate3:
+	ld	hl,wait3
+	db	0ddh
+
+;5.25KHz	3579545/15750=227.2726984127*3=682 states
+rate5:
+	ld	hl,wait5
+	db	0ddh
+
+;7.875KHz	3579545/15750=227.2726984127*2=455 states
+rate7:
+	ld	hl,wait7
+	db	0ddh
+
+;15.75KHz	3579545/15750=227.2726984127*1=227 states
+rate15:
+	ld	hl,wait15
+	push	hl
+	pop	ix
+
+
+; ＶＲＡＭとＲＡＭに分岐 ----------------------------------
+	bit	7,b
+	jr	z,mrampl
+
+
+; ＶＲＡＭ ------------------------------------------------
+	pop	hl
+	pop	de
+	push	de
+
+; 読み込みアドレスセット --------------
+swvdp1:
+	ld	c,vdp1
+	ld	a,h
+	rla
+	rl	e
+	rla
+	rl	e
+	out	(c),e
+	ld	a,8eh
+	out	(c),a
+	out	(c),l
+	ld	a,h
+	and	03fh
+	out	(c),a
+
+	pop	de
+	ld	b,d
+	inc	b
+	pop	de
+swvdp0:
+	ld	c,vdp0
+
+vploop:
+	in	a,(c)		;12+1
+	and	10000000b	;7+1
+	ld	l,a		;4+1
+	in	a,(sound.p)	;11+1
+	and	01111111b	;7+1
+	or	l		;4+1
+	out	(sound.p),a	;11+1
+	call	rwait		;17+1
+
+	dec	de		;6+1
+	ld	a,d		;4+1
+	or	e		;4+1
+	jp	nz,vploop	;10+1
+	djnz	vploop
+				;13+8+5+12+8+5+12+18+7+5+5+11=109
+
+	ei			;許可
+	jp	hekira		;to return
+
+
+
+; ＲＡＭ --------------------------------------------------
+mrampl:
+	pop	hl
+	pop	de
+	pop	bc
+
+mploop:
+	ld	a,(hl)		;7+1
+	and	10000000b	;7+1
+	ld	e,a		;4+1
+	inc	hl		;6+1
+	in	a,(sound.p)	;11+1
+	and	01111111b	;7+1
+	or	e		;4+1
+	out	(sound.p),a	;11+1
+	call	rwait		;17+1
+
+	dec	bc		;6+1
+	ld	a,b		;4+1
+	or	c		;4+1
+	jp	nz,mploop	;10+1
+				;8+8+5+7+12+8+5+12+18+7+5+5+11=111
+
+	ei			;許可
+
+
+; ＣＰＵ調節して終了 --------------------------------------
+hekira:
+	ld	a,(cpu.mode)
+	call	cpuchg
+
+	or	a		;Cy←0 （正常終了）
+	ret
+
+
+
+; サブルーチン ****************************************************************
+; ウェイト ------------------------------------------------
+rwait:
+	jp	(ix)
+
+wait3:
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl		;200
+	bit	7,a
+	bit	7,a
+	bit	7,a		;909-682=227
+wait5:
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl		;200
+	bit	7,a
+	bit	7,a
+	bit	7,a		;682-455=227
+wait7:
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl
+	ex	(sp),hl		;200
+	inc	de
+	dec	de
+	inc	de
+	dec	de		;455-227=228
+wait15:
+	ex	(sp),ix
+	ex	(sp),ix
+	ex	(sp),ix
+	ex	(sp),ix		;(23+1)*4=96
+	ld	a,i		;96+(9+1)=106=227-(111+10)
+	ret
+
+
+
+
+; データ **********************************************************************
+cpu.mode:
+	db	z80mode		;DRAM or ROM
+
+
+
+	END
+

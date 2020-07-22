@@ -1,0 +1,95 @@
+;=== Install Font Driver ' HALNOTE ' ===
+;(C)1998 GIGAMIX/Influenza/Itaro
+;98/07/07
+
+; HALNOTEがあるかどうか調べる
+; A にスロット番号 無ければ 0ffh
+
+; このプログラムはページ3でないと動きません
+
+	.z80
+	cseg
+
+	public	HAL_search
+		;[in]  None
+		;[out] A : Slot (0ffh = not exist)
+
+SRCHHA::
+HAL_search:
+	LD	HL,HALSCN
+	call	slot_scan
+	ret
+;------------------------
+; HALNOTE Search by Influenza
+;   4010H 'HN'
+;[In]	A:Slot#
+;[Out]	A:Result
+
+HALSCN:	PUSH	BC
+	PUSH	HL
+	PUSH	AF
+	LD	HL,4010H
+	CALL	000CH
+	CP	'H'
+	JR	NZ,HALSC9
+	POP	AF
+	PUSH	AF
+	INC	HL
+	CALL	000CH
+	CP	'N'
+	JR	NZ,HALSC9
+	POP	AF
+	POP	HL
+	POP	BC
+	RET
+
+HALSC9:	POP	AF
+	POP	HL
+	POP	BC
+	LD	A,0FFH
+	RET
+
+;======================================
+; SLOT Search by ITARO
+;In:HL=Call ADDR
+;Out:A=Slot#(0FFH=Nothing)
+;Use:AF,BC,HL
+;Memo:	Found...A=Slot#
+;	NotFound...A=0FFH
+
+slot_scan:
+SLTSCH:	LD	(SLTSC6+1),HL
+	LD	(SLTSC7+1),HL
+	LD	HL,0FCC1h+3
+	LD	B,4
+SLTSC1:	LD	A,(HL)
+	DEC	HL
+	RLCA
+	JR	C,SLTSC2
+	LD	A,B
+	DEC	A
+SLTSC6:	CALL	0000
+	INC	A
+	JR	NZ,SLTSC5
+SLTSC4:	DJNZ	SLTSC1
+	JR	SLTSC5
+
+SLTSC2:	LD	C,B
+	LD	B,4
+SLTSC3:	LD	A,B
+	DEC	A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,C
+	DEC	A
+	ADD	A,080H
+SLTSC7:	CALL	0000
+	INC	A
+	JR	NZ,SLTSC5
+	DJNZ	SLTSC3
+	LD	B,C
+	JR	SLTSC4
+SLTSC5:	DEC	A
+	RET
+
+	end

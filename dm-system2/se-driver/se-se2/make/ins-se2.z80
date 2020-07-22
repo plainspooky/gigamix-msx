@@ -1,0 +1,95 @@
+;===== SEドライバインストーラー standard se driver2  =====
+;(C)1998 GIGAMIX/Influenza
+
+	.z80
+	cseg
+
+CALSLT	equ	01ch
+BLTRVR	equ	408fh
+RAMAD1	equ	0f342h
+SEON	equ	4067h
+
+INST::
+; DM-SYSTEM 2 Check
+; is exist ?
+
+	call	getatr
+	bit	5,(hl)
+	ld	de,mess1
+	jr	z,exit
+
+	ld	hl,4000h
+	call	rdslt_word
+	ld	e,'D'
+	ld	d,'M'
+	or	a
+	sbc	hl,de
+	ld	de,mess1
+	jr	nz,exit
+
+; changing SE-driver OK ?
+
+	ld	hl,SEON+3
+	call	rdslt_word
+	ld	de,2830h
+	or	a
+	sbc	hl,de
+	ld	de,mess2
+	jr	nz,exit
+
+; 本体転送
+	xor	a
+	ld	hl,driver
+	ld	de,2800h
+	ld	bc,1024
+	LD	IX,BLTRVR
+	LD	IY,(RAMAD1-1)
+	call	CALSLT
+	ld	de,mess0
+
+exit:
+	ld	c,9
+	call	0f37dh
+
+	ret
+
+; Read word from MainRAM
+;[In]	hl : address
+;[Out]	hl : value
+rdslt_word:
+	ld	a,(RAMAD1)
+	push	af
+	call	000ch
+	ld	e,a
+	pop	af
+	inc	hl
+	push	de
+	call	000ch
+	pop	hl
+	ld	h,a
+	ret
+
+getatr:
+	LD	A,(0F342H)
+	AND	0FH
+	LD	E,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	OR	E
+	AND	3CH
+	LD	E,A
+	LD	D,0
+	LD	HL,0FCC9H
+	ADD	HL,DE
+	INC	HL
+	RET
+
+mess0:	defb	'Installed.$'
+mess1:	defb	'DM-SYSTEM2 not exist.$'
+mess2:	defb	'This DM-SYSTEM2 is too old.$'
+
+driver:
+
+	end

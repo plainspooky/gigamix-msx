@@ -1,0 +1,306 @@
+;===== Device Driver [Standard Type] =====
+;(C)1996 GIGAMIX/ITARO/Influenza
+;??/??/?? - 97/09/03
+
+        .z80
+        aseg
+	ORG	7800H
+          
+;デバイスドライバ by ITARO/ No Use Mouce BIOS by Influenza
+;＋０
+;入力：	なし
+;出力：	(DMMPO1)→ポート１の接続情報
+;	(DMMPO2)→ポート２の接続情報
+;＋３
+;入力：	なし
+;出力：	Ａ→戻り値（入力されたトリガ・スティック）
+;	Ｌ→Ｘ座標の移動量
+;	Ｈ→Ｙ座標の移動量
+;	(DMMDEV)→入力があったポートの番号
+
+GTPAD	EQU	000DBH
+DMMDEV	EQU	04341H
+DMMPO1	EQU	04344H
+DMMPO2	EQU	04345H
+MSXVER	EQU	04303H
+
+;		 0        10        20        30        40
+;		 +----+----+----+----+----+----+----+----+
+	DEFM	'DM標準 MOUSE & JOYSTICK DRIVER  BY ITARO'
+
+	DEFB	01AH,002H
+	DEFS	6
+
+	JP	DEVINI
+	JP	DEVMOU
+	JP	DEVSTK
+	JP	DEVTRG
+
+DEVINI:	LD	HL,0
+	LD	(DMMPO1),HL
+	LD	A,(MSXVER)
+	CP	3
+	JR	C,DEVIN0
+	LD	HL,SWAIT0
+	LD	DE,SWAIT
+	LD	BC,15
+	LDIR
+DEVIN0:	LD	B,2
+DEVILP:	PUSH	BC
+	CALL	GETMX	;MOUSCN
+	POP	BC
+	PUSH	BC
+	PUSH	HL
+	CALL	GETMX	;MOUSCN
+	POP	DE
+	POP	BC
+	OR	A
+	SBC	HL,DE
+	JR	NZ,WRTWRK	;移動量が一定してないならマウスあり
+	DEC	D
+	DEC	E
+	LD	A,D
+	OR	E
+	JR	NZ,WRTWRK	;移動量が +1以外ならマウスあり
+	DJNZ	DEVILP
+	RET
+
+WRTWRK:	LD	H,043H
+	LD	A,H
+	ADD	A,B
+	LD	L,A
+	LD	(HL),1
+	RET
+
+DEVMOU:	LD	A,1
+	LD	HL,DMMPO2
+	LD	B,2
+DEVLP:	CP	(HL)
+	JP	Z,GETMX
+	DEC	HL
+	DJNZ	DEVLP
+	LD	HL,0
+	RET
+
+DEVSTK:	CALL	STKSCN
+	LD	C,A
+	LD	A,B
+	LD	(DMMDEV),A
+	LD	A,C
+	RET
+
+DEVTRG:	CALL	TRGSCN
+	OR	A
+	CALL	Z,STKSCN
+	CP	9
+	JR	NC,$+3
+	XOR	A
+	LD	C,A
+	LD	A,B
+	LD	(DMMDEV),A
+	LD	A,C
+	RET
+
+;解析パワー（笑）ジョイパッドドライバ by ITARO
+;優先順位はＰ２トリガ、Ｐ２スティック、Ｐ１トリガ、Ｐ１スティックの順。
+;ちなみに、Ａ，Ｂトリガ同時入力も判定できます。（笑）
+;（現在はＡトリガのみ押した時と同じ動作をしています）
+
+TRGSCN:	LD	B,2
+TRGLP:	PUSH	BC
+	CALL	PORTRD
+	CALL	TRGNO
+	OR	A
+	POP	BC
+	RET	NZ
+	DJNZ	TRGLP
+	RET
+
+TRGNO:	LD	HL,TRGTBL
+	AND	030H
+	RLCA
+	RLCA
+	RLCA
+	RLCA
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC
+	LD	A,(HL)
+	OR	A
+	RET
+
+STKSCN:	LD	DE,DMMPO2
+	LD	B,2
+STKLP:	LD	A,(DE)
+	DEC	A
+	JR	Z,STKLP0
+	PUSH	BC
+	CALL	PORTRD
+	CALL	STKNO
+	OR	A
+	POP	BC
+	RET	NZ
+STKLP0:	DEC	DE
+	DJNZ	STKLP
+	RET
+
+STKNO:	LD	HL,STKTBL
+	AND	00FH
+	LD	C,A
+	LD	B,0
+	ADD	HL,BC
+	LD	A,(HL)
+	RET
+PORTRD:	LD	A,00FH
+	DI
+	OUT	(0A0H),A
+	IN	A,(0A2H)
+	DJNZ	PORT2
+	AND	0AFH
+	JR	PORT1
+PORT2:	AND	0DFH
+	OR	040H
+PORT1:	OUT	(0A1H),A
+	LD	A,00EH
+	OUT	(0A0H),A
+	IN	A,(0A2H)
+	EI
+	RET
+
+;MOUTBL:	DEFB	08FH,030H,0CFH,070H
+;[  ][  ][  ][  ][右][左][下][上]
+STKTBL:	DEFB	13,5,1,14,3,4,2,3,7,6,8,7,15,5,1,0
+TRGTBL:	DEFB	9,10,9,0
+
+;================================
+; Mouse Read
+
+GETMX:
+	LD	A,B
+	LD	E,0FH
+	LD	BC,00BFH	;Port 1
+	LD	HL,10EFH
+	DEC	A
+	JR	Z,GETMX0
+	LD	BC,40FFH	;Port 2
+	LD	HL,20DFH
+
+GETMX0:	DI
+	CALL	P8HIGH
+	CALL	RD0
+	PUSH	AF
+	CALL	P8LOW
+	CALL	RD3
+	PUSH	AF
+	CALL	P8HIGH
+	CALL	RD1
+	PUSH	AF
+	CALL	P8LOW
+	CALL	RD1
+	PUSH	AF
+	CALL	P8HIGH
+	CALL	RD1
+	PUSH	AF
+	CALL	P8LOW
+	CALL	RD3
+	PUSH	AF
+	CALL	P8HIGH
+	CALL	SWAIT
+	CALL	P8LOW
+	CALL	SWAIT
+	CALL	P8HIGH
+	EI
+	POP	AF
+	POP	HL
+	POP	DE
+	POP	BC
+	XOR	08H
+	SUB	02H
+	CP	0DH
+	JR	C,GETM1
+;--------------------------
+; Track Ball
+	POP	AF
+	CALL	TRKSUB
+	LD	H,A
+	POP	AF
+	CALL	TRKSUB
+	LD	L,A
+	RET
+;^^^^^^^^^^^^^^^^^^^^^^^^^
+; Mouse
+GETM1:	LD	A,D
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	OR	H
+	NEG
+	LD	H,A
+	POP	AF
+	POP	DE
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	ADD	A,A
+	OR	B
+	NEG
+	LD	L,A
+	RET
+;------------------------
+RD3:	CALL	SWAIT
+	CALL	SWAIT
+RD1:	CALL	SWAIT
+RD0:	LD	A,0EH
+	CALL	CHGPO0
+	AND	0FH
+	RET
+;-------------------------
+SWAIT:
+;Not turboR
+	EX	(SP),HL
+	EX	(SP),HL
+	EX	(SP),HL
+	EX	(SP),HL
+	RET
+	DEFS	10
+;turboR
+SWAIT0:	PUSH	HL
+	LD	L,A
+	IN	A,(0E6H)
+	LD	H,A
+SWAIT1:	IN	A,(0E6H)
+	SUB	H
+	CP	7
+	JR	C,SWAIT1
+	LD	A,L
+	POP	HL
+	RET
+;========================
+TRKSUB:	XOR	08H
+	BIT	3,A
+	RET	Z
+	OR	0F0H
+	RET
+;========================
+P8HIGH:	CALL	CHGPOR
+	AND	L
+	JR	P8XXX
+P8LOW:	CALL	CHGPOR
+	OR	H
+P8XXX:	PUSH	AF
+	LD	A,E
+	OUT	(0A0H),A
+	POP	AF
+	OUT	(0A1H),A
+	RET
+;========================
+CHGPOR:	LD	A,E
+CHGPO0:	OUT	(0A0H),A
+	IN	A,(0A2H)
+	AND	C
+	OR	B
+	RET
+;========================
+
+	END

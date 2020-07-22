@@ -1,0 +1,51 @@
+;===== フォントドライバインストーラー 標準漢字ROM =====
+;(C)1998 GIGAMIX/Influenza
+
+; 標準漢字ROMを探して、あればインストール(300hのほうを書き換える)
+; 無ければ Device I/O error
+
+	.z80
+	cseg
+
+	extrn	krom_fontdriver,krom_search,krom_2nd
+
+CALSLT	equ	01ch
+BLTRVR	equ	408fh
+RAMAD1	equ	0f342h
+xSIZ16	equ	300h+175
+
+INSTKR::
+krom_install::
+	call	krom_search	;無ければ nz
+	LD	E,19
+	JP	nz,406FH	;Device I/O error
+
+; 本体転送
+	xor	a
+	ld	hl,krom_fontdriver
+	ld	de,7400h
+	ld	bc,512
+	call	block
+
+	call	krom_2nd
+	jr	z,exist
+	ld	hl,0000
+	ld	(size+4),hl
+exist:
+
+; パラメータ設定
+	ld	hl,size
+	LD	DE,xSIZ16
+	LD	BC,6
+	call	block
+
+	RET
+;----------------------------------
+SIZE:	DEFB	8,16, 16,16, 16,16
+
+BLOCK:	XOR	A
+	LD	IX,BLTRVR
+	LD	IY,(RAMAD1-1)
+	JP	CALSLT
+
+	end

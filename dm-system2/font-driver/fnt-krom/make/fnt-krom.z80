@@ -1,0 +1,146 @@
+;=== Font Driver 'Standard K-ROM' ===
+;(C)1998 GIGAMIX/Influenza
+
+	.z80
+	cseg
+
+	public	krom_fontdriver
+
+BUFFER	EQU	0FC18H
+PRTHEX	EQU	4123h
+
+;-----------------------
+;	DEFB	8,16	;Ank Size
+;	DEFB	16,16	;Standard 1st
+;	DEFB	16,16	;Standard 2nd
+;-----------------------
+
+krom_fontdriver:
+	.phase	7400h
+
+;		 0....5....10...15...20...25...30...35...
+	DEFM	'Font Driver for Standard Kanji-ROM 1 & 2'
+	DEFB	1AH
+	DEFB	0	;Driver ID (0:Font Driver)
+	DEFB	1	;Size (1:16x16)
+	DEFS	5
+;======================================
+	JP	MAIN
+; おまけエントリ
+;FONTが格納されているKANJI-ROM内部アドレスを表示する
+; _CALL(&h7433,,<ShiftJIS-code>)
+
+	ex	de,hl
+	call	sjis
+	jp	PRTHEX
+;============================
+MAIN:	LD	C,0D8H
+	DEC	B
+	JR	Z,ZEN
+	INC	B
+	JR	Z,HAN
+	INC	C
+	INC	C
+;============================
+ZEN:	CALL	SJIS
+	CALL	READ
+	LD	HL,BUFFER
+	LD	DE,1010H
+	LD	BC,0010H
+	RET
+;----------------------------
+HAN:	LD	H,D
+	LD	A,E
+	RLA
+	JR	NC,HAN0
+	CCF
+	LD	H,9
+HAN0:	RRA
+	SUB	32
+	LD	L,A
+	CALL	KUTEN
+	CALL	READ
+	LD	HL,BUFFER
+	LD	DE,1008H
+	LD	BC,0010H
+	RET
+;=========================
+READ:	LD	A,L
+	AND	3FH
+	DI
+	OUT	(C),A
+	INC	C
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,H
+	OUT	(C),A
+	LD	A,8
+	LD	HL,BUFFER-1
+	LD	B,A
+READ0:	INC	L
+	INI
+	JR	NZ,READ0
+	LD	B,A
+	LD	L,18H
+READ1:	INC	L
+	INI
+	JR	NZ,READ1
+	LD	B,A
+	LD	L,27H
+READ2:	INC	L
+	INI
+	JR	NZ,READ2
+	LD	B,A
+	LD	L,28H
+READ3:	INC	L
+	INI
+	JR	NZ,READ3
+	EI
+	RET
+;------------------------
+;===== S-JIS Exchanger =====
+;DE(S-JISｺｰﾄﾞ) => HL(Kanjiｺｰﾄﾞ)
+
+;A,B,DE,HL ｦ ﾊｶｲ
+
+;--- ｼﾌﾄJIS => ｸﾃﾝｺｰﾄﾞ
+SJIS:	LD	HL,0162H
+	LD	A,E
+	CP	9FH
+	JR	NC,SJIS1
+	LD	HL,00C0H
+	CP	7FH
+	JR	NC,SJIS1
+	INC	L
+SJIS1:	LD	A,D
+	SUB	81H
+	ADD	A,A
+	LD	D,A
+	ADD	HL,DE
+;--- ｸﾃﾝｺｰﾄﾞ => Kanjiｺｰﾄﾞ
+;SJIS0+23
+KUTEN:	LD	B,L
+	LD	L,H
+	LD	E,H
+	LD	H,0
+	LD	D,H
+	ADD	HL,HL
+	ADD	HL,DE
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,HL
+	LD	A,E
+	CP	010H
+	JR	C,KUTEN1
+	DEC	H
+	DEC	H
+KUTEN1:	LD	E,B
+	ADD	HL,DE
+	RET
+;------------------------
+
+	.dephase
+
+	end

@@ -1,0 +1,356 @@
+;=== MSX-View漢字ROMｶｰﾄﾘｯｼﾞ･12ﾄﾞｯﾄ漢字ﾄﾞﾗｲﾊﾞ ===
+;(C)1997-2000 GIGAMIX/Influenza/Goripon
+;Special Thanks "A to C"
+;	b981115a	beta
+;	r981115a	release
+;	b990515a	beta
+;	r000806a	release FS-A1WX/WSXへのｲﾝｽﾄｰﾙ時ﾊﾝｸﾞｱｯﾌﾟ回避(SRC-VIEW.MAC)
+;	r000809a	release ﾄﾞﾗｲﾊﾞｻｲｽﾞの超過(4ﾊﾞｲﾄ)を修正(FNT-VIEW.MAC)
+;	r010711a	release FS-CM1挿入状態で検索後不安定になる問題の修正(SRC-VIEW.MAC)
+
+;****** ｱｾﾝﾌﾞﾗ設定
+	.z80
+	cseg
+
+;****** ﾗﾍﾞﾙ定義
+RDSLT			equ	00ch
+WRSLT			equ	014h
+ENASLT			equ	024h
+;------
+ReadBank8		equ	7ff4h
+ReadBankA		equ	7ff5h
+ReadBankMsb		equ	7ff8h
+;ReadBankCtrl		equ	7ff9h
+WriteBank8		equ	7000h
+WriteBankA		equ	7800h
+WriteBankMsb		equ	7ff8h
+WriteBankCtrl		equ	7ff9h
+;------
+RAMAD2			equ	0f343h
+KBUF			equ	0f41fh
+LINWRK			equ	0fc18h
+;------
+InternalStack		equ	KBUF+318
+SaveStack		equ	LINWRK+0	;2
+FontBank		equ	LINWRK+2	;2
+FontAddress		equ	LINWRK+4	;2
+FontBuffer		equ	LINWRK+6	;18
+
+;****** ﾄﾞﾗｲﾊﾞﾍｯﾀﾞ情報
+DRVPROG::
+	.phase	7600h
+		;0123456789012345678901234567890123456789
+	db	'MSX-View Kanji-ROM font driver  r010711a'
+	db	1ah
+	db	0
+	db	2
+	ds	5
+
+;****** ﾄﾞﾗｲﾊﾞｺｰﾙｴﾝﾄﾘ
+	jp	Main12
+
+;****** 12x8 拡張ﾌｫﾝﾄﾄﾞﾗｲﾊﾞ用ﾃﾞｰﾀｴﾘｱ
+	db	 6, 8, 12, 8,  0, 0
+	dw	Main08
+
+;****** ﾄﾞﾗｲﾊﾞﾃﾞｰﾀｴﾘｱ
+ViewSlot:
+	db	8fh
+ViewRomtype:
+	db	10000001b
+ViewTopBank12:
+	dw	160
+ViewTopBank08:
+	dw	160+64
+
+;****** ﾄﾞﾗｲﾊﾞﾜｰｸｴﾘｱ(要初期値)
+SaveBankMsb:
+	db	0
+SaveBank8:
+	db	0
+SaveBankA:
+	db	0
+
+;****** 12x12ﾄﾞｯﾄﾄﾞﾗｲﾊﾞ ﾒｲﾝﾌﾟﾛｸﾞﾗﾑ
+Main12:
+	ex	de,hl
+	push	bc
+	ld	a,h
+	or	a
+	call	z,HankakuToJis
+	bit	7,h
+	call	nz,SjisToJis
+	call	JisToKanji
+	ld	a,(ViewRomtype)
+	rra				;;bit	0,a
+	push	af
+	call	nc,BugEscape1		;;call	z,BugEscape1
+	call	SetAddress12
+	pop	af
+	call	nc,BugEscape2		;;call	z,BugEscape2
+	call	ReadFontData
+	pop	af			;;pop	bc
+					;;ld	a,b
+	ld	hl,FontBuffer
+	ld	de,0c0ch
+	ld	bc,000ch
+	or	a
+	ret	nz
+	ld	e,06h			;;ld	de,0c06h
+	ret
+
+;****** 12x08ﾄﾞｯﾄﾄﾞﾗｲﾊﾞ ﾒｲﾝﾌﾟﾛｸﾞﾗﾑ
+Main08:
+	ex	de,hl
+	push	bc
+	ld	a,h
+	or	a
+	call	z,HankakuToJis
+	bit	7,h
+	call	nz,SjisToJis
+	call	JisToKanji
+	call	SetAddress08
+	call	ReadFontData
+	pop	af			;;pop	bc
+					;;ld	a,b
+	ld	hl,FontBuffer
+	ld	de,080ch
+	ld	bc,000ch
+	or	a
+	ret	nz
+	ld	e,06h			;;ld	de,0c06h
+	ret
+
+;****** 半角からJISへのｺｰﾄﾞ変換
+HankakuToJis:
+	ld	h,20h
+	ld	a,l
+	sub	80h
+	ret	c
+	ld	h,29h
+	ld	l,a
+	ret
+
+;****** ｼﾌﾄJISからJISへのｺｰﾄﾞ変換
+SjisToJis:
+	ld	a,h
+	sub	0b1h			;;sub	71h
+					;;cp	9fh-71h
+	jr	nc,sjj00		;;jr	c,sjj00
+	add	a,71h-0b1h		;;sub	0b1h-71h
+sjj00:	add	a,a
+	inc	a
+	ld	h,a
+;------
+	ld	a,l
+	rl	l			;;cp	7fh+1
+					;;jr	c,sjj01
+					;;dec	a
+sjj01:	sbc	a,1fh			;;sub	1fh
+	cp	9eh-1fh
+	jr	c,sjj02
+	sub	7dh-1fh
+	inc	h
+sjj02:	ld	l,a
+	ret
+
+;****** JISから漢字ｺｰﾄﾞへのｺｰﾄﾞ変換
+JisToKanji:
+	ld	de,-2020h
+	add	hl,de
+	ld	de,0
+	ld	a,h
+	cp	16
+	jr	c,jtk00
+	ld	d,-2			;;ld	de,-512
+jtk00:	ld	a,l
+	ld	l,h
+	ld	h,0
+	ld	b,h
+	ld	c,l
+	add	hl,hl
+	add	hl,bc
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,de
+					;;ld	b,0
+	ld	c,a
+	add	hl,bc
+	ret
+
+;****** ﾌｫﾝﾄﾃﾞｰﾀ読み込み
+ReadFontData:
+	di
+	ld	(SaveStack),sp
+	ld	sp,InternalStack
+;------
+	ld	a,(ViewRomtype)
+	rla				;;bit	7,a
+	jr	nc,NotPanasonic		;;jr	z,NotPanasonic
+
+	ld	a,(ViewSlot)
+	ld	e,0ffh
+	ld	hl,WriteBankCtrl
+	call	WRSLT
+
+	ld	a,(ViewSlot)
+	ld	hl,ReadBankMsb
+	call	RDSLT
+	ld	(SaveBankMsb),a
+	ld	a,(ViewSlot)
+	ld	hl,ReadBank8
+	call	RDSLT
+	ld	(SaveBank8),a
+	ld	a,(ViewSlot)
+	ld	hl,ReadBankA
+	call	RDSLT
+	ld	(SaveBankA),a
+
+	ld	de,(FontBank)
+	ld	a,d
+	inc	de
+	rrca
+	rr	d
+	rra
+	rrca
+	rrca
+	and	00110000b
+	ld	d,a
+	ld	a,(SaveBankMsb)
+	and	11001111b
+	or	d
+	ld	e,a
+	ld	a,(ViewSlot)
+	ld	hl,WriteBankMsb
+	call	WRSLT
+;;	ld	a,(ViewSlot)		;ﾊﾞﾝｸｺﾝﾄﾛｰﾙﾚｼﾞｽﾀを初期値に戻す
+;;	ld	e,00010000b
+;;	ld	hl,WriteBankCtrl
+;;	call	WRSLT
+NotPanasonic:
+	ld	de,(FontBank)
+	ld	a,(ViewSlot)
+	ld	hl,WriteBank8
+	call	WRSLT
+	inc	e
+	ld	a,(ViewSlot)
+	ld	hl,WriteBankA
+	call	WRSLT
+;------
+	ld	a,(ViewSlot)
+	ld	h,80h
+	call	ENASLT
+	ld	hl,(FontAddress)
+	ld	de,FontBuffer
+	ld	bc,18
+	ldir
+	ld	a,(RAMAD2)
+	ld	h,80h
+	call	ENASLT
+;------
+	ld	a,(ViewSlot)
+	ld	de,(SaveBankMsb)
+	ld	hl,WriteBankMsb
+	call	WRSLT
+	ld	a,(ViewSlot)
+	ld	de,(SaveBank8)
+	ld	hl,WriteBank8
+	call	WRSLT
+	ld	a,(ViewSlot)
+	ld	de,(SaveBankA)
+	ld	hl,WriteBankA
+	call	WRSLT
+;------
+	ld	sp,(SaveStack)
+	ei
+	ret
+
+;****** 漢字ｺｰﾄﾞからﾊﾞﾝｸとｱﾄﾞﾚｽを計算(12×8ﾄﾞｯﾄﾌｫﾝﾄ)
+SetAddress08:
+	ld	b,h	;a:hl = hl * 12
+	ld	c,l	;(hl < 8192)
+	xor	a
+	add	hl,hl
+	add	hl,bc
+	add	hl,hl
+					;;add	hl,hl
+					;;adc	a,a
+	ld	de,(ViewTopBank08)
+	jr	setadr
+
+;****** 漢字ｺｰﾄﾞからﾊﾞﾝｸとｱﾄﾞﾚｽを計算(12×12ﾄﾞｯﾄﾌｫﾝﾄ)
+SetAddress12:
+	ld	b,h	;a:hl = hl * 18
+	ld	c,l	;(hl < 8192)
+	xor	a
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,bc
+	adc	a,0
+					;;add	hl,hl
+					;;adc	a,a
+	ld	de,(ViewTopBank12)
+					;;jr	setadr
+;------
+setadr:
+	add	hl,hl			;;↑
+	adc	a,a			;;
+	push	hl
+	ld	l,h
+	ld	h,a
+	add	hl,hl
+	adc	a,a
+	add	hl,hl
+	adc	a,a
+	add	hl,hl
+	adc	a,a
+	ld	l,h
+	ld	h,a
+	add	hl,de
+	ld	(FontBank),hl
+	pop	hl
+	set	7,h
+	res	6,h
+	res	5,h
+	ld	(FontAddress),hl
+	ret
+
+;****** MSX-View漢字ROMｶｰﾄﾘｯｼﾞのﾃﾞｰﾀﾊﾞｸﾞ回避ﾙｰﾁﾝ#1-第二水準
+BugEscape1:
+	ld	a,h
+	cp	16h
+	ret	c
+	jr	z,besc10
+	cp	1dh
+	ret	nz
+	ld	a,l
+	cp	81h
+	ret	c
+	jr	besc11
+besc10:	ld	a,l
+	cp	7
+	jr	c,besc11
+	cp	0c1h
+	ret	nz
+besc11:	dec	hl
+	dec	hl
+	ret
+
+;****** MSX-View漢字ROMｶｰﾄﾘｯｼﾞのﾃﾞｰﾀﾊﾞｸﾞ回避ﾙｰﾁﾝ#2-半角7Eh
+BugEscape2:
+	ld	hl,005eh
+	xor	a
+	sbc	hl,bc
+	ret	nz
+	ld	hl,(ViewTopBank08)
+	ld	(FontBank),hl
+	ld	hl,0468h+8000h
+	ld	(FontAddress),hl
+	ret
+
+	.dephase
+	end

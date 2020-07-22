@@ -1,0 +1,16 @@
+HALNOTE用フォントドライバインストーラ
+(C)1998 GIGAMIX/Influenza
+
+DMシステム2にHALNOTE用フォントドライバをインストールします。
+
+/// 使い方 ///
+BASIC上で、
+
+  BLOAD"FNT-HAL.BIN",R [return]
+
+と入力するだけです。
+
+ただしあらかじめ、&HC000以降の領域を空けておく必要があります。
+
+例)
+  CLEAR300,&HC000

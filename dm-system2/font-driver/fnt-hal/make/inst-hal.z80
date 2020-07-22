@@ -1,0 +1,56 @@
+;===== フォントドライバインストーラー HALNOTE =====
+;(C)1998 GIGAMIX/Influenza
+
+; HALNOTEを探して、あればインストール(300hのほうを書き換える)
+; 無ければ Device I/O error
+
+	.z80
+	cseg
+
+	extrn	HAL_fontdriver,HAL_search
+	extrn	SLTHAL
+
+CALSLT	equ	01ch
+BLTRVR	equ	408fh
+RAMAD1	equ	0f342h
+FONT12	equ	7600h
+xSIZ12	equ	300h+175+6
+
+INSTHA::
+HAL_install::
+	call	HAL_search	;無ければ A:0ffh
+	cp	0ffh
+	LD	E,19
+	JP	z,406FH	;Device I/O error
+
+; 本体転送 & SLTHAL 書替え
+	push	af
+
+	xor	a
+	ld	hl,HAL_fontdriver
+	ld	de,FONT12
+	ld	bc,512
+	call	block
+
+	pop	af
+	ld	e,a
+	ld	a,(RAMAD1)
+	ld	hl,SLTHAL
+	call	0014h
+
+; パラメータ設定
+	ld	hl,size
+	LD	DE,xSIZ12
+	LD	BC,6
+	call	block
+
+	RET
+;----------------------------------
+SIZE:	DEFB	6,12, 12,12, 0,0
+
+BLOCK:	XOR	A
+	LD	IX,BLTRVR
+	LD	IY,(RAMAD1-1)
+	JP	CALSLT
+
+	end

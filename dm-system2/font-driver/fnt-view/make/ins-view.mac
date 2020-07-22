@@ -1,0 +1,38 @@
+;=== MSX-View漢字ROMｶｰﾄﾘｯｼﾞ･12ﾄﾞｯﾄ漢字ﾄﾞﾗｲﾊﾞ ｲﾝｽﾄｰﾗ ===
+;(C)1997-2000 GIGAMIX/Influenza/Itaro/Goripon
+;Special Thanks "A to C"
+;	b981115a	beta
+;	r981115a	release
+;	b990515a	beta
+;	r000806a	release FS-A1WX/WSXへのｲﾝｽﾄｰﾙ時ﾊﾝｸﾞｱｯﾌﾟ回避(SEARCH.MAC)
+;	r000809a	release ﾄﾞﾗｲﾊﾞｻｲｽﾞの超過(4ﾊﾞｲﾄ)を修正(FNT-VIEW.MAC)
+;	r010711a	release FS-CM1挿入状態で検索後不安定になる問題の修正(SRC-VIEW.MAC)
+
+;****** ｱｾﾝﾌﾞﾗ設定
+	.z80
+	cseg
+
+;****** ﾗﾍﾞﾙ定義
+CALSLT			equ	01Ch
+;------
+BLTRVR			equ	408Fh
+xFNT12			equ	7600h
+;------
+RAMAD1			equ	0F342h
+
+;****** ｲﾝｽﾄｰﾗ ﾒｲﾝﾌﾟﾛｸﾞﾗﾑ
+INST::
+	call	SRCHVIW##
+	push	de
+	ld	hl,DRVPROG##
+	ld	de,xFNT12
+	ld	bc,512
+	xor	a
+	ld	ix,BLTRVR
+	ld	iy,(RAMAD1-1)
+	call	CALSLT
+	pop	de
+	call	SETDATA##
+	ret
+
+	end

@@ -1,0 +1,295 @@
+;===== Font Driver [ Refill Kun 12x12 ] =====
+;                       (C)1997 GIGAMIX/Influenza/A to C
+;97/03/17 - 97/07/09
+
+;	* 「かんたん手帳リフィルくん」  *
+        .Z80
+	CSEG
+
+	public	RFIL_fontdriver,SLTRFL
+
+RAMAD2  EQU     0F341H+2
+BUFFER  EQU     0FC18H
+BUF     EQU     0F51FH
+FONT12	equ	7600h
+
+WRSLT   EQU     00014H
+ENASLT  EQU     00024H  ;スロット切り替え
+
+MMPDIO  EQU     07000H  ;バンクレジスタのアドレス(PAGE2用)
+MMPAGE  EQU     08000H  ;切り替えるページ(PAGE2)
+;-----------------------
+;       DEFB     6,12    ;Ank Size
+;       DEFB    12,12   ;Standard 1st
+;       DEFB    12,12   ;Standard 2nd
+;-----------------------
+
+RFIL_fontdriver:
+	.phase	FONT12
+
+;		 0....5....10...15...20...25...30...35...
+        DEFM    'FontDriver:Refill kun  /A to C/Influenza'
+	DEFB	1AH
+	DEFB	0	;Driver ID (0:Font Driver)
+        DEFB    2       ;Size (2:12x12)
+        DEFS    5
+;----------------------
+       DEC      B
+       JR       Z,ZEN
+;----------------------
+HAN:
+        LD      A,E
+
+	LD	H,0
+	LD	D,H
+        SUB     20H
+	CP	80H-20H
+        JR      C,HAN1
+	SUB	20H		;9FH〜80Hの間を詰める
+HAN1:                           ;一文字12bytesだからASCIIコードを12倍
+	LD	L,A		;
+	ADD	A,4		;オフセットは16だが1/4しておく
+	LD	E,A		;16=LEN("SHARSHAR!!      ") ← 識別子が16文字
+	ADD	HL,HL		;x2		   123456
+	ADD	HL,DE		;x3+(offset/4)
+	ADD	HL,HL		;x6+(offset/2)
+	ADD	HL,HL		;x12+offset
+	LD	E,D
+        CALL    Get_BANK
+
+        LD      (SAVSTK),SP
+        LD      SP,BUF
+
+        CALL    Enable_REFILL
+
+        LD      DE,BUFFER
+        LD      HL,(ADDR)
+        CALL    Read_HAN
+        CALL    Read_HAN
+        CALL    Read_HAN
+        CALL    Read_HAN
+        CALL    Read_HAN
+        CALL    Read_HAN
+
+        CALL    Restore
+
+        LD      SP,(SAVSTK)
+
+        LD      HL,BUFFER
+        LD      DE,0C06H
+        LD      BC,000CH
+
+        RET
+;------
+ZEN:
+        EX      DE,HL
+        CALL    SJIS_JIS
+        CALL    JISKNJ
+        CALL    Get_BANK
+
+        LD      (SAVSTK),SP
+        LD      SP,BUF
+
+        CALL    Enable_REFILL
+
+        LD      DE,BUFFER
+        LD      HL,(ADDR)
+        CALL    Read_ZEN
+        CALL    Read_ZEN
+        CALL    Read_ZEN
+        CALL    Read_ZEN
+        CALL    Read_ZEN
+        CALL    Read_ZEN
+
+        CALL    Restore
+
+        LD      SP,(SAVSTK)
+
+        LD      HL,BUFFER
+        LD      DE,0C0CH
+        LD      BC,000CH
+
+        RET
+;------
+Read_HAN:
+        LD      A,(HL)
+        INC     HL
+        RLCA
+        LD      (DE),A
+        INC     DE
+
+        LD      A,(HL)
+        INC     HL
+        RRCA
+        RRCA
+        RRCA
+        LD      (DE),A
+        INC     DE
+        LD      (DE),A
+        INC     DE
+
+        RET
+;-------
+Read_ZEN:
+        LD      A,(HL)
+        INC     HL
+        LD      (DE),A
+        INC     DE
+        LD      C,(HL)
+        INC     HL
+        LD      A,(HL)
+        INC     HL
+        LD      B,(HL)
+        INC     HL
+        SRL     A
+        RR      B
+        SRL     A
+        RR      B
+        SRL     A
+        RR      B
+        SRL     A
+        RR      B
+        AND     0FH
+        OR      C
+        LD      (DE),A
+        INC     DE
+        LD      A,B
+        LD      (DE),A
+        INC     DE
+
+        RET
+;-------
+;機能：「リフィルくん」からフォントを読み込む
+;入力：DE:HL=「リフィルくん」内部へのポインタ
+;出力：無し
+;特記：ファイルから読み込んだ場合、エラーが出ると強制的に終了する
+
+Get_Bank:
+				;ROMからデータを読み込む
+	LD	A,H		;bit16〜bit14を取り出す
+	AND	11000000B	;bit14/bit15
+	OR	E		;bit16
+	RLCA
+	RLCA			;Aの下位3bitにbit16〜bit14が入る
+        LD      (BANK),A
+
+	LD	A,H		;下位14bitを取り出す
+	AND	00111111B
+	LD	H,A
+	LD	DE,MMPAGE	;ページオフセットを付ける
+	ADD	HL,DE
+        LD      (ADDR),HL
+	RET
+;-------
+SJIS_JIS:				;HL に Shift-JISコード
+	ld	a,h			;JISコードに変換して返す
+	sub	71h
+	cp	9fh-71h
+	jr	c,sjj00
+	sub	0b1h-71h
+sjj00:	add	a,a
+	inc	a
+	ld	h,a
+
+	ld	a,l
+	cp	7fh+1
+	jr	c,sjj01
+	dec	a
+sjj01:	sub	1fh
+	cp	9eh-1fh
+	jr	c,sjj02
+	sub	7dh-1fh
+	inc	h
+sjj02:	ld	l,a
+        ret
+;------------------
+JISKNJ:
+	LD	DE,-2020H	;区点コードに変換
+	ADD	HL,DE
+	LD	E,L
+	LD	A,H
+				;漢字コードに変換
+	ADD	A,A		;x2
+	ADD	A,H		;x3
+	LD	L,A
+	LD	H,0
+	LD	D,H
+	ADD	HL,HL		;x6
+	ADD	HL,HL		;x12
+	ADD	HL,HL		;x24
+	ADD	HL,HL		;x48
+	ADD	HL,HL		;x96
+	ADD	HL,DE
+	SUB	3*16
+	LD	BC,14080	;区が15以下ならばオフセットを14080に
+	JR	C,JISKNJ1	;14080=4000H-[(21H-20H)*96*24]
+				;2120HがBank1の先頭に来る
+
+	DEC	H		;区が16以上なら512を引く
+	DEC	H		;オフセットを8192に
+	LD	BC,8192		;8192=4000H*2-[{(30H-20H)*96-512}*24]
+				;3020HがBank2の先頭に来る
+
+	SUB	3*7		;区が23以上ならオフセットを8192+256に
+	JR	C,JISKNJ1	;8192+256=4000H*3-[{(37H-20H)*96-512}*24]
+	INC	B		;3720HがBank3の先頭に来る
+
+	SUB	3*7		;区が30以上ならオフセットを8192+256*2に
+	JR	C,JISKNJ1	;8192+256*2=4000H*4-[{(3EH-20H)*96-512}*24]
+	INC	B		;3E20HがBank4の先頭に来る
+
+	SUB	3*7		;区が37以上ならオフセットを8192+256*3に
+	JR	C,JISKNJ1	;8192+256*3=4000H*5-[{(45H-20H)*96-512}*24]
+	INC	B		;4520HがBank5の先頭に来る
+
+	SUB	3*7		;区が44以上ならオフセットを8192+256*4に
+	JR	C,JISKNJ1	;8192+256*4=4000H*6-[{(4CH-20H)*96-512}*24]
+	INC	B		;4C20HがBank6の先頭に来る
+
+JISKNJ1:
+	PUSH	BC
+	LD	E,D		;一文字24bytesだから漢字コードを24倍
+	LD	B,H		;漢字コードのMAX=(4FH-20H)*96-512+7EH-20H
+	LD	C,L		;      =4094
+	ADD	HL,HL		;x2
+	ADD	HL,BC		;x3
+	ADD	HL,HL		;x6
+	ADD	HL,HL		;x12	4094x12=49128 < 10000H
+	ADD	HL,HL		;x24
+	RL	E
+	POP	BC
+	ADD	HL,BC		;オフセットを足してポインタを得る
+	LD	A,D
+	ADC	A,E
+	LD	E,A
+	RET
+
+;----------------------------
+Enable_REFILL:
+        LD      A,(SLTRFL)
+        LD      H,80H
+        CALL    ENASLT
+
+        LD      A,(SLTRFL)
+        LD      HL,MMPDIO
+        LD      DE,(BANK)
+        JP      WRSLT
+;--------------------
+Restore:
+        LD      A,(SLTRFL)
+        LD      HL,(MMPDIO)
+        LD      E,0
+        CALL    WRSLT
+
+        LD      A,(RAMAD2)
+        LD      H,80H
+        JP      ENASLT
+;--------------------
+SLTRFL:  defb	00
+BANK:   DEFB    00
+ADDR:   DEFW    0000
+SAVSTK: DEFW    0000
+
+	.dephase
+
+	END
